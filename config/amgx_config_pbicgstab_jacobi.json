@@ -1,0 +1,15 @@
+{
+  "config_version": 2,
+  "solver": {
+    "solver": "PBICGSTAB",
+    "tolerance": 1e-8,
+    "max_iters": 200,
+    "norm": "L2",
+    "monitor_residual": 0,
+    "print_solve_stats": 0,
+    "obtain_timings": 0,
+    "scaling": "NONE",
+
+    "preconditioner": { "solver": "JACOBI_L1", "max_iters": 1 }
+  }
+}

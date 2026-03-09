@@ -1,0 +1,24 @@
+{
+  "config_version": 2,
+  "solver": {
+    "solver": "FGMRES",
+    "tolerance": 1e-5,
+    "max_iters": 500,
+    "gmres_n_restart": 30,
+    "norm": "L2",
+    "monitor_residual": 1,
+    "print_solve_stats": 1,
+    "obtain_timings": 1,
+
+    "preconditioner": {
+      "solver": "AMG",
+      "algorithm": "CLASSICAL",
+      "cycle": "V",
+      "max_iters": 1,
+      "presweeps": 1,
+      "postsweeps": 1,
+      "coarsest_sweeps": 1,
+      "coarse_solver": "NOSOLVER"
+    }
+  }
+}

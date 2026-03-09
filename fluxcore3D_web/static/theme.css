@@ -1,0 +1,178 @@
+/* FluxCore3D — dark VS Code-inspired theme */
+
+:root {
+  --bg-base:      #1e1e1e;
+  --bg-panel:     #252526;
+  --bg-card:      #2d2d2d;
+  --bg-input:     #3c3c3c;
+  --border:       #3f3f3f;
+  --border-focus: #666;
+  --text-primary: #e8eaed;
+  --text-secondary:#ccc;
+  --text-muted:   #888;
+  --text-hint:    #555;
+  --accent-blue:  #1a7fd4;
+  --accent-teal:  #0e7055;
+  --tab-active:   #fff;
+}
+
+body {
+  background-color: var(--bg-base) !important;
+  color: var(--text-primary) !important;
+  font-family: "Segoe UI", "Inter", Arial, sans-serif;
+  font-size: 14px;
+}
+
+/* Quasar overrides */
+.q-card {
+  background-color: var(--bg-panel) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+
+.q-tab-panel {
+  background-color: var(--bg-panel) !important;
+  padding: 8px !important;
+}
+
+.q-tab-panels {
+  background-color: var(--bg-panel) !important;
+}
+
+.q-tabs {
+  background-color: var(--bg-base) !important;
+  border-bottom: 1px solid var(--border);
+}
+
+.q-tab {
+  color: var(--text-muted) !important;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.q-tab--active {
+  color: var(--tab-active) !important;
+  border-bottom: 2px solid var(--accent-blue);
+}
+
+/* Inputs */
+.q-field__control {
+  background-color: var(--bg-input) !important;
+  border-color: var(--border) !important;
+  color: var(--text-primary) !important;
+}
+
+.q-field__native, .q-field__input {
+  color: var(--text-primary) !important;
+}
+
+.q-field--outlined .q-field__control {
+  border: 1px solid var(--border) !important;
+}
+
+.q-field--focused .q-field__control {
+  border-color: var(--border-focus) !important;
+}
+
+/* Select popups */
+.q-menu {
+  background-color: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.q-item {
+  color: var(--text-primary) !important;
+}
+
+.q-item:hover {
+  background-color: #404040 !important;
+}
+
+/* Checkboxes */
+.q-checkbox__inner {
+  border-color: #555 !important;
+  background-color: #1a1a1a !important;
+}
+
+.q-checkbox__inner--truthy {
+  background-color: var(--accent-blue) !important;
+  border-color: #2a9fff !important;
+}
+
+/* Buttons */
+.q-btn {
+  font-size: 13px;
+  border-radius: 4px;
+}
+
+/* Progress bar */
+.q-linear-progress {
+  background-color: #1a1a1a !important;
+}
+
+.q-linear-progress__track {
+  background-color: #333 !important;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #1a1a1a; }
+::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
+
+/* Log area */
+.fc3d-log {
+  background: #141414 !important;
+  border: 1px solid #2a2a2a !important;
+  border-radius: 3px;
+  color: #3a8a5a !important;
+  font-family: "Consolas","Courier New",monospace;
+  font-size: 12px;
+}
+
+/* Viewer area */
+.fc3d-viewer {
+  background: #141414;
+  border: 1px solid #333;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Status badge */
+.fc3d-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: "Consolas","Courier New",monospace;
+}
+
+/* Splitter handle */
+.q-splitter__separator {
+  background: #333 !important;
+  width: 3px !important;
+}
+
+/* Diagnostics table */
+.diag-table th {
+  background: #2d2d2d;
+  color: #888;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-bottom: 1px solid #3f3f3f;
+}
+
+.diag-table td {
+  padding: 3px 8px;
+  font-size: 12px;
+  font-family: "Consolas","Courier New",monospace;
+  border-bottom: 1px solid #2a2a2a;
+  color: #ccc;
+}
+
+.diag-table tr:last-child td,
+.diag-table tr:nth-last-child(2) td {
+  font-weight: bold;
+}

@@ -1,0 +1,39 @@
+{
+  "version": "1.0",
+  "project_name": "jeep",
+  "domain": {
+    "Lx": 0.045,
+    "Ly": 0.35,
+    "Lz": 0.1
+  },
+  "j0_divisor": 3.25,
+  "bodies": [
+    {
+      "stl_path": "C:/Users/Immortal Machine/Documents/CHT/geometries/mrcow.stl",
+      "name": "MrCow",
+      "build_dir": "+Z",
+      "material": "Aluminum (LBM-scaled)",
+      "color": "gold",
+      "role": "fluid_base"
+    }
+  ],
+  "fluid": "Air (LBM-scaled)",
+  "t_in_C": 20.0,
+  "t_amb_C": 20.0,
+  "flow_dir": "+Y",
+  "u_in": 20.0,
+  "collision": "mrt_smag",
+  "outlet_bc": "convective",
+  "bc_type": "volumetric",
+  "bc_params": {
+    "solid_name": "MrCow",
+    "Q_watts": 25.0
+  },
+  "dx_mm": 0.5,
+  "tol_u_ema": 0.005,
+  "max_outer": 50000,
+  "tol_dTs": 0.01,
+  "tol_dTf": 0.01,
+  "dt_scale_max": 100.0,
+  "max_mg": 15
+}

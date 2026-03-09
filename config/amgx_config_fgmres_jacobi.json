@@ -1,0 +1,17 @@
+{
+  "config_version": 2,
+  "solver": {
+    "solver": "FGMRES",
+    "tolerance": 1e-8,
+    "max_iters": 200,
+    "gmres_n_restart": 30,
+    "use_scalar_norm": 1,
+    "norm": "L2",
+    "monitor_residual": 0,
+    "print_solve_stats": 0,
+    "obtain_timings": 0,
+    "scaling": "NONE",
+
+    "preconditioner": { "solver": "JACOBI_L1", "max_iters": 1 }
+  }
+}

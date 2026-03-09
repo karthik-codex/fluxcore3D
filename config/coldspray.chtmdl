@@ -1,0 +1,64 @@
+{
+  "version": "1.0",
+  "project_name": "Coldspray_heatsink",
+  "domain": {
+    "Lx": 0.15,
+    "Ly": 0.4,
+    "Lz": 0.06
+  },
+  "j0_divisor": 3.25,
+  "bodies": [
+    {
+      "stl_path": "C:/Users/Karthik/Documents/CHT/geometries/Coldspray-heatsink/heatsink.stl",
+      "name": "Heatsink",
+      "build_dir": "+Y",
+      "material": "Aluminum (physical)",
+      "color": "steelblue",
+      "role": "fluid_base"
+    },
+    {
+      "stl_path": "C:/Users/Karthik/Documents/CHT/geometries/Coldspray-heatsink/CuSpray.stl",
+      "name": "Copper Spray",
+      "build_dir": "+Y",
+      "material": "Copper",
+      "color": "darkorange",
+      "role": "stack_below"
+    },
+    {
+      "stl_path": "C:/Users/Karthik/Documents/CHT/geometries/Coldspray-heatsink/TIM.stl",
+      "name": "Thermal Paste",
+      "build_dir": "+Y",
+      "material": "TIM (silicone pad)",
+      "color": "hotpink",
+      "role": "stack_below"
+    },
+    {
+      "stl_path": "C:/Users/Karthik/Documents/CHT/geometries/Coldspray-heatsink/heatsource.stl",
+      "name": "PTC Source",
+      "build_dir": "+Y",
+      "material": "Transformer core",
+      "color": "limegreen",
+      "role": "stack_below"
+    }
+  ],
+  "fluid": "Air (physical)",
+  "t_in_C": 20.0,
+  "t_amb_C": 20.0,
+  "flow_dir": "+Y",
+  "u_in": 1.0,
+  "collision": "mrt_smag",
+  "outlet_bc": "convective",
+  "bc_type": "volumetric",
+  "bc_params": {
+    "solid_name": "PTC Source",
+    "Q_watts": 20.0
+  },
+  "dx_mm": 0.6,
+  "gpu_raytrace": true,
+  "tol_u_ema": 0.005,
+  "max_outer": 50000,
+  "tol_dTs": 0.01,
+  "tol_dTf": 0.01,
+  "dt_scale_max": 100.0,
+  "max_mg": 15
+}

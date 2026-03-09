@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "units": {
+    "length": "mm",
+    "force": "N",
+    "stress": "MPa",
+    "temperature": "C",
+    "cte": "1/C"
+  },
+  "materials": {
+    "316L": {
+      "meta": {
+        "note": "example stainless steel; numbers are placeholders—replace with your data",
+        "reference_density": 7.99e-3
+      },
+      "E": {
+        "T":   [  20,  200,  300,  400,  500, 600 , 700, 800 , 900, 1000, 1100 , 1200 , 1300 , 1400 ],
+        "val": [ 1.923e5, 1.77e5, 1.695e5, 1.6144e5, 1.53e5, 1.45e5, 1.37e5, 1.09e5, 6.319e4, 3.736e4, 1.641e4, 1.08e4, 8.532e3, 8.59e2 ],
+        "interp": "pwl",
+        "extrap": "clamp"
+      },
+      "nu": {
+        "T":   [  20,  200,  400,  600,  800 ],
+        "val": [ 0.30, 0.305, 0.31,  0.315, 0.32 ],
+        "interp": "pwl",
+        "extrap": "clamp"
+      },
+      "alpha_CTE": {
+        "T":   [   20,   176,   332,   488,   644, 800],
+        "val": [ 1.51e-5, 1.57e-5, 1.63e-5, 1.7e-5, 1.76e-5, 1.82e-5 ],
+        "interp": "pwl",
+        "extrap": "clamp"
+      },
+      "relative_density_scaling": {
+        "E_factor_vs_phi": {
+          "phi": [0.80, 0.90, 1.00],
+          "val": [0.60, 0.80, 1.00],
+          "interp": "pwl",
+          "extrap": "clamp"
+        }
+      },
+      "viscosity": {
+        "model": "arrhenius",
+        "gas_constant_R": 8.314e-3,
+        "A0": {
+          "T":   [  20, 400, 800 ],
+          "val": [ 1.0e6, 5.0e5, 1.0e5 ],
+          "interp": "pwl",
+          "extrap": "clamp",
+          "units": "MPa*s"
+        },
+        "Q": {
+          "T":   [  20, 400, 800 ],
+          "val": [ 180.0, 170.0, 160.0 ],
+          "interp": "pwl",
+          "extrap": "clamp",
+          "units": "kJ/mol"
+        }
+      }
+    }
+  }
+}

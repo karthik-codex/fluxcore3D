@@ -1,0 +1,97 @@
+# Units: MPa, mm, N, s, g
+meta:
+  material_name: "316L"
+  dtype: "float64"           # e.g., float32 | float64
+  tangent_stencil: "trilinear"
+  ghost_mode: "off"          # off | mass_only
+
+paths:
+  part_STL: "cantilever_30mm_final.stl" #ss10.stl" #"cantilever_30mm.stl" #"sample_block_10x5x2mm.stl" #"ss10.stl" #"AM37601D-1015_Detent.stl" #"GF_220457.stl" # #
+  build_dir: "+Z" # +X | -X | +Y | -Y | +Z | -Z
+  id_output: "01_vol_corr_ratio1"            # unique identifier for this simulation
+
+geometry:
+  part_scale: 1.0            # mm
+  layer_height: 0.4          # mm
+  nodes_per_layer: 600       # nodes per layer
+  sampling_type: "adaptive"   # uniform | curvature_based
+
+material:
+  E: 2.0e5                   # MPa
+  nu: 0.30
+  alpha: 0.0e-5              # 1/°C
+  rho: 8.00e-9               # tonne/mm^3 (≈ g/mm^3) — consistent with mm,N,s,g
+
+gravity:
+  g: [0.0, 0.0, -9.81e3]     # mm/s^2
+  gravity: true
+
+contact:
+  mu: 0.2                           # friction coefficient
+  gammaN: 0.2                       # Nitsche normal penalty param
+  gammaT: 0.02                       # Nitsche tangential penalty param (0.1·gammaN)
+  cnt_qp_max: 1                    # Quadrature points per contact face
+  cnt_bilateral_gap_scale: 0.002   # for bilateral slip scaling
+  g_smooth: 2e-2                 # smoothing length for bilateral transition (mm)
+  cnt_mu_reg_eps_tau: 1e-2   # was 1e-5, adds base to tau_cap
+  cnt_slip_reg_eps: 0.1      # sigmoid width as fraction of tau_cap
+  eps_sign: 1e-6                  # regularization for sign function
+  cnt_kt_slip_reg: 0.02             # 5% of kt in slip
+  cnt_alpha_lambda: 0.3             # for λ_n update (0.5 = mid)
+  cnt_AL_decay_zeta: 0.7            # per step decay of AL zeta
+  cnt_E_ref: 2.0e5        # MPa, room temp value
+  cnt_nu_ref: 0.3
+  cnt_gt_reg_eps: 0.001
+  cnt_friction_threshold: 1e-2 # MPa
+
+damping:
+  gamma_M: 1.9625e-9         # 7.85e-9 / 4.0
+  gamma_K: 4.0e3             # 2.0e5 / 50.0
+  nr_relax_damping: 0.2      # artificial damping for implicit solves
+  ptc_gamma0: 0.0         # initial PTC damping factor
+  evp_alpha_damp: 0.1       # viscoplastic hybrid relaxation factor
+
+thermal:
+  T_amb: 20.0
+  T_plate: 300.0
+  T_target: 250.0
+
+solver:
+  nr_max_iter: 12
+  nr_tol: 1.0e-3
+  nr_rel_tol_base: 2.0e-2
+  nr_abs_floor_smallR0: 0.5     # absolute floor for small R0 (NEW)
+  nr_abs_tol_hold: 1.0e-2
+  nr_ls_max: 6
+  nr_cg_max_iter: 500
+  nr_cg_tol: 1.0e-5
+  nr_solver_type: "gmres_gpu"   # normal_eq | gmres_gpu | bicgstab | amgx | gmres_cpu_ilu | hypre
+  preconditioner: "physics"        # jacobi | physics | None
+  force_method: "pilotto"         # original | pilotto | hybrid `_with_interior_correction
+  verbose: True
+  secant_predictor: False
+
+adaptivity:
+  dt_init: 200.0              # initial time step (s)
+  dt_min: 0.001                # minimum time step (s)
+  dt_max: 500.0              # maximum time step (s)
+  dt_cap: 100.0
+  dt_hold1: 1000.0           # 470°C hold
+  dt_hold2: 200.0           # 1000°C hold
+  dt_hold3: 400.0           # 1380°C hold
+  grow_factor: 2.25
+  shrink_factor: 0.25
+  max_retries: 10
+  iter_easy: 10
+  iter_hard: 12
+  plateau_window: 3
+  plateau_tol: 0.05             # <5% net improvement over window ⇒ plateau
+
+bool:
+  render_3D: true
+  print_log_file: false
+  disp_vectors: false
+  initialize: true
+  run_model: true
+  model_preview: true
+  log_output: false
