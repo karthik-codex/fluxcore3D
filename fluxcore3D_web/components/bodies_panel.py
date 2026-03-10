@@ -181,7 +181,7 @@ class BodiesPanel:
                     return False
 
                 def _browse_stl_local():
-                    """Native file dialog — only works when app runs on local machine."""
+                    """Native file dialog — falls back to upload if no display available."""
                     try:
                         import tkinter as tk
                         from tkinter import filedialog
@@ -202,7 +202,10 @@ class BodiesPanel:
                                 name_input.value = stem
                                 body["name"]     = stem
                     except Exception as err:
-                        ui.notify(f"Browse error: {err}", type="negative")
+                        # No display available (e.g. RunPod with DISPLAY set but no X server)
+                        # silently fall back to the upload dialog
+                        import asyncio as _aio
+                        _aio.ensure_future(_browse_stl_upload())
 
                 async def _browse_stl_upload():
                     """Upload dialog for headless/cloud environments."""

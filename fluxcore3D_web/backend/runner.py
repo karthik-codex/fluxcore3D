@@ -368,7 +368,20 @@ def _blocking_preview(params: dict):
                         color=getattr(b, "color", "steelblue"),
                         role=getattr(b, "role", "fluid_base"))
 
-        body_dicts = [_as_dict(b) for b in params["bodies"]]
+        body_dicts = []
+        for b in params["bodies"]:
+            try:
+                bd = _as_dict(b)
+                stl = bd.get("stl_path", "")
+                if stl and not Path(stl).exists():
+                    log(f"WARNING: STL not found, skipping body '{bd.get('name','?')}': {stl}")
+                    continue
+                body_dicts.append(bd)
+            except (FileNotFoundError, OSError) as _e:
+                name = getattr(b, "name", b.get("name","?") if isinstance(b,dict) else "?")
+                log(f"WARNING: skipping body '{name}' — STL path error: {_e}")
+        if not body_dicts:
+            raise RuntimeError("No valid bodies with accessible STL files. Check STL paths.")
         log(f"{len(body_dicts)} bodies: {[b['name'] for b in body_dicts]}")
 
         # ── GPU ray-trace ─────────────────────────────────────────────────────
