@@ -219,7 +219,16 @@ class BodiesPanel:
                         _upload_dir = Path(__file__).resolve().parent.parent / "static" / "uploads"
                         _upload_dir.mkdir(parents=True, exist_ok=True)
 
+                        uploader = ui.upload(
+                            label="Drop STL here or click to select",
+                            auto_upload=True,
+                        ).props("accept='.stl,.STL' flat").classes("w-full")
+
                         status_lbl = ui.label("No file selected").classes("text-xs text-slate-500")
+
+                        with ui.row().classes("justify-end gap-2 w-full mt-1"):
+                            ui.button("Cancel", on_click=lambda: upload_dlg.submit(False)).props("flat dense").classes("text-slate-400")
+                            ok_btn = ui.button("OK", on_click=lambda: upload_dlg.submit(True)).props("unelevated dense").classes("bg-sky-700 text-white px-4").set_enabled(False)
 
                         def _handle_upload(e):
                             dest = _upload_dir / e.name
@@ -227,19 +236,13 @@ class BodiesPanel:
                                 f.write(e.content.read())
                             _uploaded["path"] = str(dest)
                             _uploaded["stem"] = Path(e.name).stem
-                            status_lbl.set_text(f"✔  {e.name}  ({dest.stat().st_size // 1024} KB)")
-                            status_lbl.classes(replace="text-xs text-emerald-400")
-                            ok_btn.props(remove="disable")
+                            # Hide uploader, show confirmation, enable OK
+                            uploader.set_visibility(False)
+                            status_lbl.set_text(f"✔  {e.name}  ({dest.stat().st_size // 1024} KB) — ready")
+                            status_lbl.classes(replace="text-xs text-emerald-400 font-semibold")
+                            ok_btn.set_enabled(True)
 
-                        ui.upload(
-                            label="Drop STL here or click to select",
-                            on_upload=_handle_upload,
-                            auto_upload=True,
-                        ).props("accept='.stl,.STL' flat").classes("w-full")
-
-                        with ui.row().classes("justify-end gap-2 w-full mt-1"):
-                            ui.button("Cancel", on_click=lambda: upload_dlg.submit(False)).props("flat dense").classes("text-slate-400")
-                            ok_btn = ui.button("OK", on_click=lambda: upload_dlg.submit(True)).props("unelevated dense disable").classes("bg-sky-700 text-white px-4")
+                        uploader.on_upload(_handle_upload)
 
                     result = await upload_dlg
                     if result and _uploaded.get("path"):
