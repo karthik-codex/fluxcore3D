@@ -82,7 +82,7 @@ except Exception as _e:
 
 # ── Shared state ───────────────────────────────────────────────────────────────
 
-_sim_state: dict = dict(running=False, pct=0, log=[], done=False,
+_sim_state: dict = dict(running=False, pct=0, log=[], term_log=[], done=False,
                         aborted=False, result=None, error=None)
 
 _preview_state: dict = dict(
@@ -99,7 +99,7 @@ def abort_sim():
 
 
 def reset_sim_state():
-    _sim_state.update(running=False, pct=0, log=[], done=False,
+    _sim_state.update(running=False, pct=0, log=[], term_log=[], done=False,
                       aborted=False, result=None, error=None)
 
 
@@ -120,13 +120,54 @@ def _blocking_run(params: dict):
         _sim_state["done"]  = True
         return
 
+    # ── Disable tqdm entirely — it hammers I/O and tanks GPU throughput ────────
+    os.environ["TQDM_DISABLE"] = "1"
+
+    # ── Stdout/stderr capture ─────────────────────────────────────────────────
+    # term_log → big terminal panel (all stdout/stderr)
+    # log      → small status log (high-level log_fn only)
+
+    class _StreamCapture:
+        """Tees to original stream AND appends to _sim_state['term_log'].
+        Lines arriving via \r (tqdm progress overwrites) are silently dropped.
+        Lines arriving via \n (real print statements) are kept.
+        """
+        def __init__(self, orig):
+            self._orig = orig
+            self._buf  = ""
+        def write(self, text):
+            self._orig.write(text)
+            self._orig.flush()
+            self._buf += text
+            while "\n" in self._buf or "\r" in self._buf:
+                nl = self._buf.find("\n")
+                cr = self._buf.find("\r")
+                # Pick whichever separator comes first
+                if nl == -1 or (cr != -1 and cr < nl):
+                    # \r line → tqdm progress overwrite → DROP
+                    line, self._buf = self._buf.split("\r", 1)
+                else:
+                    # \n line → real print → KEEP
+                    line, self._buf = self._buf.split("\n", 1)
+                    line = line.rstrip()
+                    if line:
+                        _sim_state["term_log"].append(line)
+        def flush(self):    self._orig.flush()
+        def isatty(self):   return False
+        def fileno(self):   return self._orig.fileno()
+
+    _orig_out, _orig_err = sys.stdout, sys.stderr
+    sys.stdout = _StreamCapture(_orig_out)
+    sys.stderr = _StreamCapture(_orig_err)
+
     def log_fn(msg):
-        print(f"[SIM] {msg}")           # mirror to terminal so nothing is silent
+        # High-level: small log gets it, terminal gets it too
         _sim_state["log"].append(msg)
+        _sim_state["term_log"].append(f"[SIM] {msg}")
     def pct_fn(n):    _sim_state["pct"] = n
     def abort_fn():   return _sim_state["aborted"]
 
-    print("[SIM] _blocking_run starting…")
+    _sim_state["term_log"].append("[SIM] _blocking_run starting…")
     orig_cwd = os.getcwd()
     try:
         # cht_worker._apply_bc loads NPZs by relative path (spec.name + ".npz").
@@ -160,6 +201,7 @@ def _blocking_run(params: dict):
         print(f"[SIM ERROR] {exc}\n{full}")
         _sim_state["error"] = f"{exc}\n\n{full}"
     finally:
+        sys.stdout, sys.stderr = _orig_out, _orig_err
         os.chdir(orig_cwd)
         _sim_state["done"]    = True
         _sim_state["running"] = False
@@ -563,9 +605,12 @@ def export_results_gltf(npz_path: str, storage: dict) -> dict:
         show_bodies = [n for n in body_names
                        if vis_bodies.get(n, True)] if vis_bodies else body_names
 
-        fluid_k0   = int(data["fluid_k0"]) if "fluid_k0" in data.files else 0
+        # Use np.asarray().flat[0] to safely handle both 0-d and 1-element arrays
+        # (NumPy version differences between machines cause int() to fail on 1-element arrays)
+        def _scalar(arr): return np.asarray(arr).flat[0]
+        fluid_k0   = int(_scalar(data["fluid_k0"])) if "fluid_k0" in data.files else 0
         flow_dir   = storage.get("result_flow_dir",
-                     str(data["flow_dir"]) if "flow_dir" in data.files else "+X")
+                     str(_scalar(data["flow_dir"])) if "flow_dir" in data.files else "+X")
 
         # ── Compute color range from SELECTED domains only (mirrors old GUI) ──
         body_masks = {}

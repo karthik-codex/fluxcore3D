@@ -173,8 +173,15 @@ class BodiesPanel:
                     value=body.get("stl_path", ""),
                 ).props("dense outlined").classes("flex-1 font-mono text-xs")
 
-                def _browse_stl():
-                    """Open a native Windows file-open dialog via tkinter."""
+                def _is_headless() -> bool:
+                    """True when running on a server with no display (e.g. RunPod)."""
+                    import platform, os as _os
+                    if platform.system() != "Windows":
+                        return not bool(_os.environ.get("DISPLAY") or _os.environ.get("WAYLAND_DISPLAY"))
+                    return False
+
+                def _browse_stl_local():
+                    """Native file dialog — only works when app runs on local machine."""
                     try:
                         import tkinter as tk
                         from tkinter import filedialog
@@ -197,9 +204,55 @@ class BodiesPanel:
                     except Exception as err:
                         ui.notify(f"Browse error: {err}", type="negative")
 
-                ui.button(icon="folder_open", on_click=_browse_stl).props(
-                    "flat dense"
-                ).classes("text-sky-400").tooltip("Browse for STL file")
+                async def _browse_stl_upload():
+                    """Upload dialog for headless/cloud environments."""
+                    with ui.dialog() as upload_dlg, ui.card().classes(
+                        "bg-neutral-800 border border-neutral-600 gap-3 min-w-md"
+                    ):
+                        ui.label("Upload STL file").classes("text-sm font-bold text-slate-200")
+                        ui.label(
+                            "Running on a server — upload your STL from your local machine."
+                        ).classes("text-xs text-slate-400")
+
+                        _upload_dir = Path(__file__).resolve().parent.parent / "static" / "uploads"
+                        _upload_dir.mkdir(parents=True, exist_ok=True)
+
+                        def _handle_upload(e):
+                            import shutil
+                            dest = _upload_dir / e.name
+                            with open(dest, "wb") as f:
+                                f.write(e.content.read())
+                            chosen = str(dest)
+                            stl_input.value = chosen
+                            body["stl_path"] = chosen
+                            stem = Path(e.name).stem
+                            if name_input.value.startswith("body_"):
+                                name_input.value = stem
+                                body["name"] = stem
+                            ui.notify(f"Uploaded → {e.name}", type="positive")
+                            upload_dlg.submit(None)
+
+                        ui.upload(
+                            label="Drop STL here or click to select",
+                            on_upload=_handle_upload,
+                            auto_upload=True,
+                        ).props("accept='.stl,.STL' flat").classes("w-full")
+
+                        ui.button("Cancel", on_click=lambda: upload_dlg.submit(None)).props(
+                            "flat dense"
+                        ).classes("text-slate-400 mt-1")
+
+                    await upload_dlg
+
+                import asyncio as _asyncio_bp
+                if _is_headless():
+                    ui.button(icon="cloud_upload", on_click=_browse_stl_upload).props(
+                        "flat dense"
+                    ).classes("text-sky-400").tooltip("Upload STL from your computer")
+                else:
+                    ui.button(icon="folder_open", on_click=_browse_stl_local).props(
+                        "flat dense"
+                    ).classes("text-sky-400").tooltip("Browse for STL file")
 
             # Keep body dict in sync whenever the path field changes
             stl_input.on("blur",  lambda _: body.update({"stl_path": stl_input.value.strip()}))

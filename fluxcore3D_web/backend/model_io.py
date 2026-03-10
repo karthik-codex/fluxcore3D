@@ -113,6 +113,7 @@ def load_model_file(filepath: str) -> dict | None:
 
 def restore_storage_from_model(storage: dict, model: dict) -> None:
     """Write a loaded model dict back into app.storage.user."""
+    import platform as _platform
     dom = model.get("domain", {})
     if "Lx" in dom: storage["Lx"] = dom["Lx"]
     if "Ly" in dom: storage["Ly"] = dom["Ly"]
@@ -126,13 +127,25 @@ def restore_storage_from_model(storage: dict, model: dict) -> None:
     # bodies — keep as list of plain dicts
     raw_bodies = model.get("bodies", [])
     print(f"[ModelIO] restore: found {len(raw_bodies)} bodies in model file")
+    is_linux = _platform.system() != "Windows"
     for i, b in enumerate(raw_bodies):
         name = b.get("name", "?") if isinstance(b, dict) else getattr(b, "name", "?")
-        stl  = b.get("stl_path", b.get("stl", "?")) if isinstance(b, dict) else getattr(b, "stl_path", "?")
-        print(f"  [{i}] name={name}  stl={stl}")
+        stl  = b.get("stl_path", b.get("stl", "")) if isinstance(b, dict) else getattr(b, "stl_path", "")
         # Normalise legacy 'stl' key → 'stl_path'
         if isinstance(b, dict) and "stl_path" not in b and "stl" in b:
             b["stl_path"] = b["stl"]
+        # Clear paths that don't exist on this machine (e.g. Windows paths loaded on Linux)
+        if isinstance(b, dict):
+            p = b.get("stl_path", "")
+            is_windows_path = p.startswith(("C:\\", "D:\\", "C:/", "D:/")) or "\\" in p
+            if p and not Path(p).exists():
+                if is_linux and is_windows_path:
+                    print(f"  [{i}] name={name}  stl=⚠ Windows path not found on Linux — cleared: {p}")
+                else:
+                    print(f"  [{i}] name={name}  stl=⚠ path not found — cleared: {p}")
+                b["stl_path"] = ""
+            else:
+                print(f"  [{i}] name={name}  stl={stl or '(empty)'}")
     storage["bodies"] = [b if isinstance(b, dict) else b for b in raw_bodies]
     # bc_params
     bcp = model.get("bc_params", {})

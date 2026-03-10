@@ -50,69 +50,6 @@ from tabs.visualize_tab import build_visualize_tab, populate_vis_bodies
 # Serve static CSS
 app.add_static_files("/static", str(_APP_DIR / "static"))
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Stdout interceptor — captures all print() calls for the terminal panel
-# ─────────────────────────────────────────────────────────────────────────────
-import threading as _threading
-import io as _io
-
-class _TeeStream:
-    """Writes to both original stdout and an in-memory ring buffer."""
-    MAX = 2000  # max lines kept
-
-    def __init__(self, original):
-        self._orig  = original
-        self._lines: list[str] = []
-        self._lock  = _threading.Lock()
-        self._pending: list[str] = []  # unread by UI
-        self._buf   = ""
-
-    def write(self, text: str):
-        self._orig.write(text)
-        self._orig.flush()
-        # Split on newlines, accumulate partial lines
-        self._buf += text
-        while "\n" in self._buf:
-            line, self._buf = self._buf.split("\n", 1)
-            with self._lock:
-                self._lines.append(line)
-                self._pending.append(line)
-                if len(self._lines) > self.MAX:
-                    self._lines.pop(0)
-
-    def flush(self):
-        self._orig.flush()
-
-    def isatty(self) -> bool:
-        return getattr(self._orig, "isatty", lambda: False)()
-
-    def fileno(self):
-        return self._orig.fileno()
-
-    def readable(self) -> bool: return False
-    def writable(self) -> bool: return True
-    def seekable(self) -> bool: return False
-
-    @property
-    def encoding(self):
-        return getattr(self._orig, "encoding", "utf-8")
-
-    @property
-    def errors(self):
-        return getattr(self._orig, "errors", "replace")
-
-    def drain_pending(self) -> list[str]:
-        with self._lock:
-            out = list(self._pending)
-            self._pending.clear()
-        return out
-
-    def all_lines(self) -> list[str]:
-        with self._lock:
-            return list(self._lines)
-
-_tee = _TeeStream(sys.stdout)
-sys.stdout = _tee
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  PAGE
@@ -608,9 +545,8 @@ def _build_viewer_panel(storage: dict, ui_state: dict):
             with ui.row().classes("w-full justify-end px-1 py-0"):
                 def _clear_term():
                     term_log.clear()
-                    with _tee._lock:
-                        _tee._lines.clear()
-                        _tee._pending.clear()
+                    ui_state["_term_prev_len"] = len(_preview_state.get("log", []))
+                    ui_state["_term_sim_len"]  = len(_sim_state.get("log", []))
                 ui.button(icon="delete_sweep", text="Clear",
                     on_click=_clear_term,
                 ).props("flat dense").classes("text-slate-500 text-xs")
@@ -623,12 +559,22 @@ def _build_viewer_panel(storage: dict, ui_state: dict):
             )
             ui_state["term_log"] = term_log
 
-        # Poll stdout interceptor → push new lines to terminal log
+        # Poll sim/preview log state → push new lines to terminal log
         def _poll_stdout():
             tlog = ui_state.get("term_log")
             if tlog is None: return
-            for line in _tee.drain_pending():
+            # Preview: full output in terminal
+            prev_len = ui_state.get("_term_prev_len", 0)
+            prev_msgs = _preview_state.get("log", [])
+            for line in prev_msgs[prev_len:]:
+                tlog.push(f"[PREVIEW] {line}")
+            ui_state["_term_prev_len"] = len(prev_msgs)
+            # Sim: read term_log (all stdout) not log (high-level only)
+            sim_len = ui_state.get("_term_sim_len", 0)
+            sim_msgs = _sim_state.get("term_log", [])
+            for line in sim_msgs[sim_len:]:
                 tlog.push(line)
+            ui_state["_term_sim_len"] = len(sim_msgs)
 
         ui.timer(0.3, _poll_stdout)
 
@@ -1106,61 +1052,125 @@ async def _confirm_run_dialog(storage: dict) -> bool:
 #  Save / Load model
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _is_headless() -> bool:
+    import platform, os as _os
+    if platform.system() != "Windows":
+        return not bool(_os.environ.get("DISPLAY") or _os.environ.get("WAYLAND_DISPLAY"))
+    return False
+
+
 async def _save_model_dialog(storage: dict, ui_state: dict):
     from backend.runner import _PROJECTS_DIR
-    import tkinter as _tk
-    from tkinter import filedialog as _fd
 
     default_name = storage.get("project_name", "untitled") + ".chtmdl"
-    default_path = str(_PROJECTS_DIR / default_name)
 
-    # Run tkinter file dialog off main thread
-    def _pick():
-        root = _tk.Tk(); root.withdraw(); root.attributes("-topmost", True)
-        p = _fd.asksaveasfilename(
-            title="Save FluxCore3D Model",
-            initialdir=str(_PROJECTS_DIR),
-            initialfile=default_name,
-            defaultextension=".chtmdl",
-            filetypes=[("FluxCore3D Model", "*.chtmdl"), ("All files", "*.*")],
-        )
-        root.destroy()
-        return p or ""
-
-    result = await run.io_bound(_pick)
-    if result:
-        ok = await run.io_bound(save_model_file, storage, result)
+    if _is_headless():
+        # Headless: save to projects/ dir and show path in notification
+        dest = _PROJECTS_DIR / default_name
+        ok = await run.io_bound(save_model_file, storage, str(dest))
         if ok:
-            ui.notify(f"💾  Saved: {Path(result).name}", type="positive")
+            ui.notify(f"💾  Saved → projects/{default_name}", type="positive")
             log = ui_state.get("log_area")
-            if log: log.push(f"💾  Model saved → {result}")
+            if log: log.push(f"💾  Model saved → {dest}")
         else:
             ui.notify("Failed to save model.", type="negative")
+    else:
+        import tkinter as _tk
+        from tkinter import filedialog as _fd
+
+        def _pick():
+            root = _tk.Tk(); root.withdraw(); root.attributes("-topmost", True)
+            p = _fd.asksaveasfilename(
+                title="Save FluxCore3D Model",
+                initialdir=str(_PROJECTS_DIR),
+                initialfile=default_name,
+                defaultextension=".chtmdl",
+                filetypes=[("FluxCore3D Model", "*.chtmdl"), ("All files", "*.*")],
+            )
+            root.destroy()
+            return p or ""
+
+        result = await run.io_bound(_pick)
+        if result:
+            ok = await run.io_bound(save_model_file, storage, result)
+            if ok:
+                ui.notify(f"💾  Saved: {Path(result).name}", type="positive")
+                log = ui_state.get("log_area")
+                if log: log.push(f"💾  Model saved → {result}")
+            else:
+                ui.notify("Failed to save model.", type="negative")
+
+
+def _server_file_picker(title: str, folder: Path, extensions: list[str]):
+    """
+    Build a server-side file picker widget inside the current UI context.
+    Returns a dict ref that will contain {"path": str} when a file is selected.
+    `extensions` e.g. [".chtmdl", ".json"]
+    """
+    selected = {}
+    folder.mkdir(parents=True, exist_ok=True)
+    files = sorted([f for f in folder.iterdir()
+                    if f.is_file() and f.suffix.lower() in extensions],
+                   key=lambda f: f.stat().st_mtime, reverse=True)
+
+    ui.label(f"📁  {folder}").classes("text-xs text-slate-500 font-mono")
+    if not files:
+        ui.label("No files found in this folder.").classes("text-xs text-slate-400 italic")
+    else:
+        sel_lbl = ui.label("No file selected").classes("text-xs text-slate-400")
+        def _pick(p):
+            selected["path"] = str(p)
+            sel_lbl.set_text(f"✔  {p.name}")
+            sel_lbl.classes(replace="text-xs text-emerald-400")
+        with ui.scroll_area().classes("w-full border border-neutral-700 rounded").style("max-height:200px"):
+            for f in files:
+                size_kb = f.stat().st_size // 1024
+                mtime   = __import__("datetime").datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+                with ui.row().classes(
+                    "w-full items-center gap-2 px-2 py-1 hover:bg-neutral-700 cursor-pointer rounded"
+                ).on("click", lambda _, p=f: _pick(p)):
+                    ui.icon("description").classes("text-slate-400 text-sm")
+                    ui.label(f.name).classes("text-xs text-slate-200 flex-1")
+                    ui.label(f"{size_kb} KB  {mtime}").classes("text-xs text-slate-500")
+    return selected
 
 
 async def _load_model_dialog(storage: dict, ui_state: dict):
+    from backend.runner import _PROJECTS_DIR
+    headless = _is_headless()
+
     with ui.dialog() as dlg, ui.card().classes(
-        "bg-neutral-800 border border-neutral-600 min-w-80 gap-4"
-    ):
+        "bg-neutral-800 border border-neutral-600 gap-4"
+    ).style("min-width:520px"):
         ui.label("Load Model").classes("text-base font-bold text-slate-200")
         loaded: dict = {}
+        server_sel: dict = {}  # populated only in headless mode
+
+        if headless:
+            # ── Server-side file picker ────────────────────────────────────────
+            ui.label("Select a model from the server projects folder, or upload from your computer:").classes(
+                "text-xs text-slate-400")
+            server_sel = _server_file_picker("Projects folder", _PROJECTS_DIR, [".chtmdl", ".json"])
+
+            ui.separator().classes("bg-neutral-700")
+            ui.label("Or upload from your computer:").classes("text-xs text-slate-400")
 
         async def handle_upload(e):
             try:
-                fname = e.file.name
-                raw   = await e.file.read()
+                fname = e.file.name if hasattr(e, "file") else e.name
+                raw   = await e.file.read() if hasattr(e, "file") else e.content.read()
                 text  = raw.decode("utf-8")
             except Exception as err:
-                status_lbl.text = f"Read error: {err}"
+                status_lbl.set_text(f"Read error: {err}")
                 status_lbl.classes(replace="text-xs text-red-400")
                 return
             try:
                 loaded["model"] = json.loads(text)
                 loaded["name"]  = fname
-                status_lbl.text = f"Ready to apply: {fname}"
+                status_lbl.set_text(f"Ready: {fname}")
                 status_lbl.classes(replace="text-xs text-emerald-400")
             except Exception as exc:
-                status_lbl.text = f"Parse error: {exc}"
+                status_lbl.set_text(f"Parse error: {exc}")
                 status_lbl.classes(replace="text-xs text-red-400")
 
         ui.upload(
@@ -1170,15 +1180,24 @@ async def _load_model_dialog(storage: dict, ui_state: dict):
         ).props("accept='.chtmdl,.json' flat dense").classes("w-full")
         status_lbl = ui.label("No file selected").classes("text-xs text-slate-500")
 
-        with ui.row().classes("justify-end gap-2"):
+        with ui.row().classes("justify-end gap-2 mt-1"):
             ui.button("Cancel", on_click=lambda: dlg.submit(False)).props("flat dense").classes("text-slate-400")
             ui.button("Apply",  on_click=lambda: dlg.submit(True)).props("unelevated dense").classes("bg-sky-700 text-white")
 
     result = await dlg
-    if result and "model" in loaded:
+    if not result: return
+
+    # Prefer server-side selection if headless and something was picked
+    if headless and server_sel.get("path"):
+        m = load_model_file(server_sel["path"])
+        if m:
+            restore_storage_from_model(storage, m)
+            storage["_load_msg"] = f"Model loaded: {Path(server_sel['path']).name}"
+            ui.navigate.reload()
+        else:
+            ui.notify("Failed to read model file.", type="negative")
+    elif "model" in loaded:
         restore_storage_from_model(storage, loaded["model"])
-        # Widgets bind values at construction — reliable fix is page reload.
-        # app.storage.user persists across reloads so all settings are kept.
         storage["_load_msg"] = f"Model loaded: {loaded.get('name', '')}"
         ui.navigate.reload()
 
@@ -1188,44 +1207,89 @@ async def _load_model_dialog(storage: dict, ui_state: dict):
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def _load_results_dialog(storage: dict, ui_state: dict):
+    from backend.runner import _SIM_OUT_DIR
+    headless = _is_headless()
+
     with ui.dialog() as dlg, ui.card().classes(
-        "bg-neutral-800 border border-neutral-600 min-w-80 gap-4"
-    ):
+        "bg-neutral-800 border border-neutral-600 gap-4"
+    ).style("min-width:520px"):
         ui.label("Load Results NPZ").classes("text-base font-bold text-slate-200")
         loaded: dict = {}
+        server_sel: dict = {}
+
+        if headless:
+            ui.label("Select a results file from the server, or upload from your computer:").classes(
+                "text-xs text-slate-400")
+            # Flatten sim_results/<project>/*.npz into one list sorted by mtime
+            all_npz = sorted(
+                [f for f in _SIM_OUT_DIR.rglob("*.npz")],
+                key=lambda f: f.stat().st_mtime, reverse=True
+            )
+            if not all_npz:
+                ui.label(f"No .npz files found under {_SIM_OUT_DIR}").classes(
+                    "text-xs text-slate-400 italic")
+            else:
+                ui.label(f"📁  {_SIM_OUT_DIR}").classes("text-xs text-slate-500 font-mono")
+                sel_lbl = ui.label("No file selected").classes("text-xs text-slate-400")
+                def _pick_npz(p):
+                    server_sel["path"] = str(p)
+                    server_sel["name"] = p.name
+                    sel_lbl.set_text(f"✔  {p.name}")
+                    sel_lbl.classes(replace="text-xs text-emerald-400")
+                with ui.scroll_area().classes("w-full border border-neutral-700 rounded").style("max-height:200px"):
+                    for f in all_npz:
+                        size_mb  = f.stat().st_size / 1_048_576
+                        mtime    = __import__("datetime").datetime.fromtimestamp(
+                            f.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+                        rel      = f.relative_to(_SIM_OUT_DIR)
+                        with ui.row().classes(
+                            "w-full items-center gap-2 px-2 py-1 hover:bg-neutral-700 cursor-pointer rounded"
+                        ).on("click", lambda _, p=f: _pick_npz(p)):
+                            ui.icon("analytics").classes("text-sky-400 text-sm")
+                            ui.label(str(rel)).classes("text-xs text-slate-200 flex-1")
+                            ui.label(f"{size_mb:.1f} MB  {mtime}").classes("text-xs text-slate-500")
+
+            ui.separator().classes("bg-neutral-700")
+            ui.label("Or upload from your computer:").classes("text-xs text-slate-400")
 
         async def handle_upload(e):
             try:
-                fname = e.file.name
-                raw   = await e.file.read()
+                fname = e.file.name if hasattr(e, "file") else e.name
+                raw   = await e.file.read() if hasattr(e, "file") else e.content.read()
             except Exception as err:
-                status_lbl.text = f"Read error: {err}"
+                status_lbl.set_text(f"Read error: {err}")
                 status_lbl.classes(replace="text-xs text-red-400")
                 return
             tmp = tempfile.NamedTemporaryFile(
                 delete=False, suffix=".npz", dir=tempfile.gettempdir()
             )
-            tmp.write(raw)
-            tmp.close()
+            tmp.write(raw); tmp.close()
             loaded["path"] = tmp.name
             loaded["name"] = fname
-            status_lbl.text = f"Ready: {fname}"
+            status_lbl.set_text(f"Ready: {fname}")
             status_lbl.classes(replace="text-xs text-emerald-400")
 
         ui.upload(
-            label="Upload .npz",
+            label="Upload .npz from your computer",
             auto_upload=True,
             on_upload=handle_upload,
         ).props("accept='.npz' flat dense").classes("w-full")
         status_lbl = ui.label("No file selected").classes("text-xs text-slate-500")
 
-        with ui.row().classes("justify-end gap-2"):
+        with ui.row().classes("justify-end gap-2 mt-1"):
             ui.button("Cancel", on_click=lambda: dlg.submit(False)).props("flat dense").classes("text-slate-400")
             ui.button("Render", on_click=lambda: dlg.submit(True)).props("unelevated dense").classes("bg-sky-700 text-white")
 
     result = await dlg
-    if result and "path" in loaded:
-        await _load_npz_into_viewer(loaded["path"], storage, ui_state, name=loaded.get("name",""))
+    if not result: return
+
+    # Server-side selection takes priority when headless
+    if server_sel.get("path"):
+        await _load_npz_into_viewer(server_sel["path"], storage, ui_state,
+                                     name=server_sel.get("name", ""))
+    elif loaded.get("path"):
+        await _load_npz_into_viewer(loaded["path"], storage, ui_state,
+                                     name=loaded.get("name", ""))
 
 
 async def _load_npz_into_viewer(
@@ -1256,7 +1320,7 @@ async def _load_npz_into_viewer_impl(
     try:
         data   = np.load(npz_path, allow_pickle=True)
         names  = list(data["body_names"]) if "body_names" in data.files else []
-        flow_d = str(data["flow_dir"]) if "flow_dir" in data.files else storage.get("flow_dir","+X")
+        flow_d = str(np.asarray(data["flow_dir"]).flat[0]) if "flow_dir" in data.files else storage.get("flow_dir","+X")
         field  = storage.get("vis_field", "T")
         if field not in data.files: field = "T"
         arr    = data[field]
