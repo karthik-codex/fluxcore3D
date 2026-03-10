@@ -51,6 +51,70 @@ from tabs.visualize_tab import build_visualize_tab, populate_vis_bodies
 app.add_static_files("/static", str(_APP_DIR / "static"))
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  Stdout interceptor — captures all print() calls for the terminal panel
+# ─────────────────────────────────────────────────────────────────────────────
+import threading as _threading
+import io as _io
+
+class _TeeStream:
+    """Writes to both original stdout and an in-memory ring buffer."""
+    MAX = 2000  # max lines kept
+
+    def __init__(self, original):
+        self._orig  = original
+        self._lines: list[str] = []
+        self._lock  = _threading.Lock()
+        self._pending: list[str] = []  # unread by UI
+        self._buf   = ""
+
+    def write(self, text: str):
+        self._orig.write(text)
+        self._orig.flush()
+        # Split on newlines, accumulate partial lines
+        self._buf += text
+        while "\n" in self._buf:
+            line, self._buf = self._buf.split("\n", 1)
+            with self._lock:
+                self._lines.append(line)
+                self._pending.append(line)
+                if len(self._lines) > self.MAX:
+                    self._lines.pop(0)
+
+    def flush(self):
+        self._orig.flush()
+
+    def isatty(self) -> bool:
+        return getattr(self._orig, "isatty", lambda: False)()
+
+    def fileno(self):
+        return self._orig.fileno()
+
+    def readable(self) -> bool: return False
+    def writable(self) -> bool: return True
+    def seekable(self) -> bool: return False
+
+    @property
+    def encoding(self):
+        return getattr(self._orig, "encoding", "utf-8")
+
+    @property
+    def errors(self):
+        return getattr(self._orig, "errors", "replace")
+
+    def drain_pending(self) -> list[str]:
+        with self._lock:
+            out = list(self._pending)
+            self._pending.clear()
+        return out
+
+    def all_lines(self) -> list[str]:
+        with self._lock:
+            return list(self._lines)
+
+_tee = _TeeStream(sys.stdout)
+sys.stdout = _tee
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  PAGE
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -73,6 +137,15 @@ async def main_page():
         else:
             log.push(f"⚠️  Sim modules unavailable: {_RUNNER_SIM_ERR}")
     ui.timer(0.6, _show_sim_status, once=True)
+
+    # ── Restore results if NPZ still exists from last session ─────────────────
+    async def _restore_results_on_load():
+        npz = storage.get("result_npz", "")
+        if npz and Path(npz).exists():
+            log = ui_state.get("log_area")
+            if log: log.push(f"📂  Restoring last results: {Path(npz).name}")
+            await _load_npz_into_viewer(npz, storage, ui_state)
+    ui.timer(1.0, _restore_results_on_load, once=True)
 
     # ── Global UI state (per-page, not serialised to storage) ─────────────────
     ui_state = {
@@ -158,16 +231,18 @@ async def main_page():
             if _sim_state["error"]:
                 ui.notify(f"Simulation failed: {_sim_state['error'][:120]}",
                           type="negative", timeout=6000)
+                reset_sim_state()
             elif _sim_state["result"]:
                 npz = _sim_state["result"]
                 storage["result_npz"]      = npz
                 storage["result_flow_dir"] = storage.get("flow_dir", "+X")
                 ui.notify(f"✅  Done → {Path(npz).name}", type="positive")
-                # Auto-load into visualizer
+                # Clear done BEFORE the await so re-entrant timer ticks skip this block
+                reset_sim_state()
                 await _load_npz_into_viewer(npz, storage, ui_state)
-                # Show diagnostics
                 _show_diagnostics(npz, ui_state)
-            reset_sim_state()
+            else:
+                reset_sim_state()
 
     _sim_timer = ui.timer(0.5, _poll_sim, active=False)
 
@@ -200,8 +275,10 @@ async def main_page():
                     if "gltf_url" in _bm:
                         base = _bm["gltf_url"].split("?")[0]
                         _bm["gltf_url"] = f"{base}?v={_ts}"
-                r = ui_state.get("scene_refresh")
-                if r: r()
+                # Only refresh if still in domain mode — never clobber results view
+                if ui_state.get("viewer_mode", "domain") == "domain":
+                    r = ui_state.get("scene_refresh")
+                    if r: r()
                 if sl: sl.set_text("Preview ready.")
                 ui.notify("Preview ready.", type="positive", timeout=2000)
                 info = ui_state.get("info_lbl")
@@ -376,12 +453,40 @@ def _build_viewer_panel(storage: dict, ui_state: dict):
                 "text-sky-400 text-xs border border-neutral-700 px-2 py-1 mr-2")
             ui_state["full_viewer_btn"] = full_btn
 
-        info_lbl = ui.label("Add bodies → click Preview to load here.").classes(
-            "text-xs text-slate-500 px-3 pt-1").style("flex-shrink:0")
-        ui_state["info_lbl"] = info_lbl
-        res_lbl = ui.label("").classes("text-xs text-slate-500 px-3 pt-1").style("flex-shrink:0")
-        res_lbl.set_visibility(False)
-        ui_state["res_lbl"] = res_lbl
+        # ── Snapshot button (right side of info bar) ─────────────────────────
+        with ui.row().classes("w-full items-center px-3 pt-1 gap-2").style("flex-shrink:0"):
+            info_lbl = ui.label("Add bodies → click Preview to load here.").classes(
+                "text-xs text-slate-500 flex-1")
+            ui_state["info_lbl"] = info_lbl
+            res_lbl = ui.label("").classes("text-xs text-slate-500 flex-1")
+            res_lbl.set_visibility(False)
+            ui_state["res_lbl"] = res_lbl
+
+            async def _snapshot():
+                """Capture the Three.js canvas and trigger browser download."""
+                mode = ui_state.get("viewer_mode", "domain")
+                fname = f"fluxcore3d_{'preview' if mode=='domain' else 'results'}.png"
+                await ui.run_javascript(f"""
+                    (function() {{
+                        const canvases = document.querySelectorAll('canvas');
+                        if (!canvases.length) {{ alert('No canvas found'); return; }}
+                        // Pick the largest canvas (the Three.js scene)
+                        let best = canvases[0];
+                        for (const c of canvases) {{
+                            if (c.width * c.height > best.width * best.height) best = c;
+                        }}
+                        const link = document.createElement('a');
+                        link.download = '{fname}';
+                        link.href = best.toDataURL('image/png');
+                        link.click();
+                    }})();
+                """)
+
+            ui.button(icon="photo_camera", text="Snapshot",
+                on_click=_snapshot,
+            ).props("flat dense unelevated").classes(
+                "text-slate-400 text-xs border border-neutral-700 px-2 py-1"
+            ).tooltip("Save viewport as PNG")
 
         @ui.refreshable
         def _scene_widget():
@@ -494,6 +599,38 @@ def _build_viewer_panel(storage: dict, ui_state: dict):
         ui_state["results_scene"] = None
         ui_state["domain_scene_placeholder"]  = ui.label("").classes("hidden")
         ui_state["results_scene_placeholder"] = ui.label("").classes("hidden")
+
+        # ── Terminal output panel ──────────────────────────────────────────────
+        with ui.expansion("Terminal Output", icon="terminal").classes(
+            "w-full border-t border-neutral-700 bg-neutral-950"
+        ).style("flex-shrink:0") as _term_expansion:
+            _term_expansion.props("dense")
+            with ui.row().classes("w-full justify-end px-1 py-0"):
+                def _clear_term():
+                    term_log.clear()
+                    with _tee._lock:
+                        _tee._lines.clear()
+                        _tee._pending.clear()
+                ui.button(icon="delete_sweep", text="Clear",
+                    on_click=_clear_term,
+                ).props("flat dense").classes("text-slate-500 text-xs")
+
+            term_log = ui.log(max_lines=400).classes(
+                "w-full font-mono text-xs text-emerald-300 bg-neutral-950"
+            ).style(
+                "height:180px; white-space:pre; overflow-y:auto;"
+                "border:none; padding:4px 8px"
+            )
+            ui_state["term_log"] = term_log
+
+        # Poll stdout interceptor → push new lines to terminal log
+        def _poll_stdout():
+            tlog = ui_state.get("term_log")
+            if tlog is None: return
+            for line in _tee.drain_pending():
+                tlog.push(line)
+
+        ui.timer(0.3, _poll_stdout)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -970,25 +1107,33 @@ async def _confirm_run_dialog(storage: dict) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def _save_model_dialog(storage: dict, ui_state: dict):
-    with ui.dialog() as dlg, ui.card().classes(
-        "bg-neutral-800 border border-neutral-600 min-w-80 gap-3"
-    ):
-        ui.label("Save Model").classes("text-base font-bold text-slate-200")
-        path_input = ui.input(
-            label="File path (.chtmdl)",
-            value=storage.get("project_name","untitled") + ".chtmdl",
-        ).props("dense outlined").classes("w-full")
-        with ui.row().classes("justify-end gap-2"):
-            ui.button("Cancel", on_click=lambda: dlg.submit(None)).props("flat dense").classes("text-slate-400")
-            ui.button("Save",   on_click=lambda: dlg.submit(path_input.value)).props("unelevated dense").classes("bg-sky-700 text-white")
+    from backend.runner import _PROJECTS_DIR
+    import tkinter as _tk
+    from tkinter import filedialog as _fd
 
-    result = await dlg
+    default_name = storage.get("project_name", "untitled") + ".chtmdl"
+    default_path = str(_PROJECTS_DIR / default_name)
+
+    # Run tkinter file dialog off main thread
+    def _pick():
+        root = _tk.Tk(); root.withdraw(); root.attributes("-topmost", True)
+        p = _fd.asksaveasfilename(
+            title="Save FluxCore3D Model",
+            initialdir=str(_PROJECTS_DIR),
+            initialfile=default_name,
+            defaultextension=".chtmdl",
+            filetypes=[("FluxCore3D Model", "*.chtmdl"), ("All files", "*.*")],
+        )
+        root.destroy()
+        return p or ""
+
+    result = await run.io_bound(_pick)
     if result:
         ok = await run.io_bound(save_model_file, storage, result)
         if ok:
-            ui.notify(f"💾  Model saved: {result}", type="positive")
+            ui.notify(f"💾  Saved: {Path(result).name}", type="positive")
             log = ui_state.get("log_area")
-            if log: log.push(f"💾  Model saved: {result}")
+            if log: log.push(f"💾  Model saved → {result}")
         else:
             ui.notify("Failed to save model.", type="negative")
 
@@ -1084,6 +1229,22 @@ async def _load_results_dialog(storage: dict, ui_state: dict):
 
 
 async def _load_npz_into_viewer(
+    npz_path: str, storage: dict, ui_state: dict, name: str = ""
+):
+    import numpy as np
+
+    # Prevent concurrent loads — if already loading, drop this call
+    if ui_state.get("_results_loading"):
+        return
+    ui_state["_results_loading"] = True
+
+    try:
+        await _load_npz_into_viewer_impl(npz_path, storage, ui_state, name)
+    finally:
+        ui_state["_results_loading"] = False
+
+
+async def _load_npz_into_viewer_impl(
     npz_path: str, storage: dict, ui_state: dict, name: str = ""
 ):
     import numpy as np

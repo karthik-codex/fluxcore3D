@@ -31,9 +31,13 @@ def _bootstrap_path() -> bool:
 _bootstrap_path()
 
 # ── Static dirs ────────────────────────────────────────────────────────────────
-_APP_DIR     = Path(__file__).resolve().parent.parent
-_PREVIEW_DIR = _APP_DIR / "static" / "preview"
-_RESULTS_DIR = _APP_DIR / "static" / "results"
+_APP_DIR      = Path(__file__).resolve().parent.parent
+_PREVIEW_DIR  = _APP_DIR / "static" / "preview"
+_RESULTS_DIR  = _APP_DIR / "static" / "results"
+_PROJECTS_DIR = _APP_DIR / "projects"
+_SIM_OUT_DIR  = _APP_DIR / "sim_results"
+_PROJECTS_DIR.mkdir(exist_ok=True)
+_SIM_OUT_DIR.mkdir(exist_ok=True)
 _PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
 _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -128,10 +132,27 @@ def _blocking_run(params: dict):
         # cht_worker._apply_bc loads NPZs by relative path (spec.name + ".npz").
         # All NPZs live in _VOXEL_DIR, so keep cwd there for the entire sim run.
         os.chdir(str(_VOXEL_DIR))
+        # Override output dir so results land in a persistent location
+        project_name = params.get("project_name", "simulation")
+        safe_proj = "".join(c if c.isalnum() or c in "-_" else "_" for c in project_name)
+        sim_out = _SIM_OUT_DIR / safe_proj
+        sim_out.mkdir(exist_ok=True)
+
         result = run_simulation_blocking(
             params, log_fn=log_fn, progress_fn=pct_fn, abort_fn=abort_fn)
         # Resolve to absolute path while cwd is still _VOXEL_DIR
         result = str(Path(result).resolve())
+
+        # Copy NPZ to persistent sim_results/<project>/ so it survives temp dir cleanup
+        try:
+            import shutil as _shutil
+            dest = sim_out / Path(result).name
+            if Path(result).resolve() != dest.resolve():
+                _shutil.copy2(result, dest)
+            result = str(dest)
+            print(f"[SIM] Results saved → {result}")
+        except Exception as _ce:
+            print(f"[SIM] Warning: could not copy result to projects dir: {_ce}")
         _sim_state["result"] = result
         print(f"[SIM] Done → {result}")
     except Exception as exc:
@@ -399,7 +420,7 @@ def _blocking_preview(params: dict):
             safe  = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
 
             try:
-                mesh = grid.threshold([idx - 0.5, idx + 0.5], scalars="region").extract_surface(algorithm="dataset_surface")
+                mesh = grid.threshold([idx - 0.5, idx + 0.5], scalars="region").extract_surface()
                 if mesh.n_points == 0:
                     log(f"  {name}: threshold empty — skipping")
                     continue
@@ -610,8 +631,7 @@ def export_results_gltf(npz_path: str, storage: dict) -> dict:
             try:
                 body_grid = pv.ImageData(dimensions=(nx+1,ny+1,nz+1), spacing=(1,1,1), origin=(0,0,0))
                 body_grid.cell_data["mask"] = mask.reshape(-1, order="F").astype(np.uint8)
-                surf = body_grid.threshold(0.5, scalars="mask").extract_surface(
-                    algorithm="dataset_surface")
+                surf = body_grid.threshold(0.5, scalars="mask").extract_surface()
                 if surf.n_points == 0: continue
 
                 # Smooth to reduce blocky staircase appearance
@@ -654,8 +674,7 @@ def export_results_gltf(npz_path: str, storage: dict) -> dict:
                 # T is point data — separate grid for sampling
                 fg_pts = pv.ImageData(dimensions=(nx,ny,nz), spacing=(1,1,1), origin=(0,0,0))
                 fg_pts.point_data["T"] = F.reshape(-1, order="F").astype(np.float32)
-                fluid_surf = fg.threshold(0.5, scalars="fluid").extract_surface(
-                    algorithm="dataset_surface")
+                fluid_surf = fg.threshold(0.5, scalars="fluid").extract_surface()
                 if fluid_surf.n_points > 0:
                     fluid_surf = fluid_surf.sample(fg_pts)
                     t_f = fluid_surf.point_data.get("T",
@@ -720,7 +739,14 @@ def export_results_gltf(npz_path: str, storage: dict) -> dict:
                 sl = gv.streamlines_from_source(
                     seeds, vectors="U", integration_direction="forward",
                     initial_step_length=1.5, terminal_speed=0.0,
-                    max_steps=50000, integrator_type=45)
+                    max_steps=400,          # hard cap — 150 seeds × 400 = 60k pts max
+                    integrator_type=45)
+
+                # Subsample if still too large (browser limit ~100k pts for GLTF)
+                MAX_SL_POINTS = 80_000
+                if sl.n_points > MAX_SL_POINTS:
+                    keep_ratio = MAX_SL_POINTS / sl.n_points
+                    sl = sl.decimate_pro(1.0 - keep_ratio) if hasattr(sl, "decimate_pro") else sl
 
                 if sl.n_points > 0 and sl.n_lines > 0:
                     U_sl = sl.point_data.get("U", None)
