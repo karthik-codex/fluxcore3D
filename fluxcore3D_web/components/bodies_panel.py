@@ -209,31 +209,27 @@ class BodiesPanel:
 
                 async def _browse_stl_upload():
                     """Upload dialog for headless/cloud environments."""
+                    _uploaded = {}
+
                     with ui.dialog() as upload_dlg, ui.card().classes(
-                        "bg-neutral-800 border border-neutral-600 gap-3 min-w-md"
-                    ):
+                        "bg-neutral-800 border border-neutral-600 gap-3"
+                    ).style("min-width:420px"):
                         ui.label("Upload STL file").classes("text-sm font-bold text-slate-200")
-                        ui.label(
-                            "Running on a server — upload your STL from your local machine."
-                        ).classes("text-xs text-slate-400")
 
                         _upload_dir = Path(__file__).resolve().parent.parent / "static" / "uploads"
                         _upload_dir.mkdir(parents=True, exist_ok=True)
 
+                        status_lbl = ui.label("No file selected").classes("text-xs text-slate-500")
+
                         def _handle_upload(e):
-                            import shutil
                             dest = _upload_dir / e.name
                             with open(dest, "wb") as f:
                                 f.write(e.content.read())
-                            chosen = str(dest)
-                            stl_input.value = chosen
-                            body["stl_path"] = chosen
-                            stem = Path(e.name).stem
-                            if name_input.value.startswith("body_"):
-                                name_input.value = stem
-                                body["name"] = stem
-                            ui.notify(f"Uploaded → {e.name}", type="positive")
-                            upload_dlg.submit(None)
+                            _uploaded["path"] = str(dest)
+                            _uploaded["stem"] = Path(e.name).stem
+                            status_lbl.set_text(f"✔  {e.name}  ({dest.stat().st_size // 1024} KB)")
+                            status_lbl.classes(replace="text-xs text-emerald-400")
+                            ok_btn.props(remove="disable")
 
                         ui.upload(
                             label="Drop STL here or click to select",
@@ -241,11 +237,19 @@ class BodiesPanel:
                             auto_upload=True,
                         ).props("accept='.stl,.STL' flat").classes("w-full")
 
-                        ui.button("Cancel", on_click=lambda: upload_dlg.submit(None)).props(
-                            "flat dense"
-                        ).classes("text-slate-400 mt-1")
+                        with ui.row().classes("justify-end gap-2 w-full mt-1"):
+                            ui.button("Cancel", on_click=lambda: upload_dlg.submit(False)).props("flat dense").classes("text-slate-400")
+                            ok_btn = ui.button("OK", on_click=lambda: upload_dlg.submit(True)).props("unelevated dense disable").classes("bg-sky-700 text-white px-4")
 
-                    await upload_dlg
+                    result = await upload_dlg
+                    if result and _uploaded.get("path"):
+                        chosen = _uploaded["path"]
+                        stl_input.value = chosen
+                        body["stl_path"] = chosen
+                        if name_input.value.startswith("body_"):
+                            name_input.value = _uploaded["stem"]
+                            body["name"] = _uploaded["stem"]
+                        ui.notify(f"STL set → {Path(chosen).name}", type="positive")
 
                 import asyncio as _asyncio_bp
                 if _is_headless():
