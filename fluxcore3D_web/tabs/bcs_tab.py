@@ -34,18 +34,6 @@ def build_bcs_tab(
         if face_grid_holder:
             face_grid_holder[0].set_flow_dir(val)
 
-    def _update_grid_lbl():
-        lbl = refs.get("grid_lbl")
-        if lbl is None:
-            return
-        try:
-            dx = storage.get("dx_mm", 10.0)
-            nx = round(storage.get("Lx", 5.0) * 1000 / dx)
-            ny = round(storage.get("Ly", 1.0) * 1000 / dx)
-            nz = round(storage.get("Lz", 1.0) * 1000 / dx)
-            lbl.text = f"Grid: {nx} x {ny} x {nz}   ({nx*ny*nz/1e6:.2f} M cells)"
-        except Exception:
-            lbl.text = "---"
 
     off_page_holder:  list = []
     flux_page_holder: list = []
@@ -206,32 +194,6 @@ def build_bcs_tab(
 
         # Apply initial BC visibility -- all page holders are populated now
         _set_bc(storage.get("bc_type", "off"))
-
-    # ── Voxelisation card ─────────────────────────────────────────────────────
-    with ui.card().classes("w-full bg-neutral-800 border border-neutral-700 gap-2"):
-        ui.label("VOXELISATION").classes(
-            "text-xs font-bold tracking-widest text-slate-400 uppercase"
-        )
-
-        grid_lbl = ui.label("---").classes("text-xs text-slate-400 font-mono")
-        refs["grid_lbl"] = grid_lbl  # _update_grid_lbl reads this
-
-        with ui.grid(columns=2).classes("gap-x-6 gap-y-1 items-center"):
-            ui.label("Voxel size (mm)").classes("text-xs text-slate-400")
-            ui.number(
-                value=storage.get("dx_mm", 10.0),
-                min=0.1, max=100.0, step=0.5, format="%.1f",
-                on_change=lambda e: (
-                    storage.update({"dx_mm": e.value}),
-                    _update_grid_lbl(),
-                ),
-            ).props("dense outlined").classes("w-full")
-
-        ui.label(
-            "Voxel cell pitch -- smaller = finer geometry but more cells"
-        ).classes("text-xs text-slate-500 italic")
-
-        _update_grid_lbl()
 
     return face_grid, refs
 

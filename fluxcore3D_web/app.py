@@ -104,6 +104,15 @@ async def main_page():
 
     # ── Custom CSS + fonts ────────────────────────────────────────────────────
     ui.add_head_html(
+        '<script>'
+        '(function(){'
+        'var _orig=HTMLCanvasElement.prototype.getContext;'
+        'HTMLCanvasElement.prototype.getContext=function(t,a){'
+        'if(t==="webgl"||t==="webgl2")a=Object.assign({},a,{preserveDrawingBuffer:true});'
+        'return _orig.call(this,t,a);'
+        '};'
+        '})();'
+        '</script>'
         '<link rel="stylesheet" href="/static/theme.css">'
         '<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">'
     )
@@ -124,6 +133,13 @@ async def main_page():
             value=storage.get("project_name", "cht_result"),
             on_change=lambda e: storage.update({"project_name": e.value}),
         ).props("dense outlined").classes("w-36 text-sm flex-shrink-0")
+        ui_state["proj_input"] = proj_input
+        ui.button(
+            icon="add_circle_outline", text="New",
+            on_click=lambda: _new_model_dialog(storage, ui_state),
+        ).props("flat dense unelevated").classes(
+            "text-emerald-400 border border-neutral-600 px-2 text-xs flex-shrink-0"
+        )
         ui.button(
             icon="folder_open", text="Load",
             on_click=lambda: _load_model_dialog(storage, ui_state),
@@ -138,7 +154,7 @@ async def main_page():
         )
 
     # ── Main body: splitter ───────────────────────────────────────────────────
-    with ui.splitter(value=26).classes("w-full flex-1").style(
+    with ui.splitter(value=25).classes("w-full flex-1").style(
         "height: calc(100vh - 52px)"
     ) as splitter:
         with splitter.before:
@@ -148,94 +164,102 @@ async def main_page():
 
     # ── Polling timer: sim progress + preview done ────────────────────────────
     async def _poll_sim():
-        if not _sim_state["running"] and not _sim_state["done"]:
-            return
+        try:
+            if not _sim_state["running"] and not _sim_state["done"]:
+                return
 
-        # Drain log messages
-        log: ui.log = ui_state.get("log_area")
-        prev_len = ui_state["prev_log_len_sim"]
-        msgs = _sim_state["log"]
-        for msg in msgs[prev_len:]:
-            if log:
-                log.push(msg)
-        ui_state["prev_log_len_sim"] = len(msgs)
+            # Drain log messages
+            log: ui.log = ui_state.get("log_area")
+            prev_len = ui_state["prev_log_len_sim"]
+            msgs = _sim_state["log"]
+            for msg in msgs[prev_len:]:
+                if log:
+                    log.push(msg)
+            ui_state["prev_log_len_sim"] = len(msgs)
 
-        # Progress bar
-        pb = ui_state.get("progress_bar")
-        if pb:
-            pb.value = _sim_state["pct"] / 100.0
+            # Progress bar
+            pb = ui_state.get("progress_bar")
+            if pb:
+                pb.value = _sim_state["pct"] / 100.0
 
-        # Status label
-        sl = ui_state.get("status_lbl")
-        if sl and msgs:
-            sl.set_text(msgs[-1][:70])
+            # Status label
+            sl = ui_state.get("status_lbl")
+            if sl and msgs:
+                sl.set_text(msgs[-1][:70])
 
-        if _sim_state["done"]:
+            if _sim_state["done"]:
+                _sim_timer.deactivate()
+                ui_state["sim_running"] = False
+                _set_run_btn_idle(ui_state)
+
+                if _sim_state["error"]:
+                    ui.notify(f"Simulation failed: {_sim_state['error'][:120]}",
+                              type="negative", timeout=6000)
+                    reset_sim_state()
+                elif _sim_state["result"]:
+                    npz = _sim_state["result"]
+                    storage["result_npz"]      = npz
+                    storage["result_flow_dir"] = storage.get("flow_dir", "+X")
+                    ui.notify(f"✅  Done → {Path(npz).name}", type="positive")
+                    # Clear done BEFORE the await so re-entrant timer ticks skip this block
+                    reset_sim_state()
+                    await _load_npz_into_viewer(npz, storage, ui_state)
+                    _show_diagnostics(npz, ui_state)
+                else:
+                    reset_sim_state()
+
+        except RuntimeError:
             _sim_timer.deactivate()
-            ui_state["sim_running"] = False
-            _set_run_btn_idle(ui_state)
-
-            if _sim_state["error"]:
-                ui.notify(f"Simulation failed: {_sim_state['error'][:120]}",
-                          type="negative", timeout=6000)
-                reset_sim_state()
-            elif _sim_state["result"]:
-                npz = _sim_state["result"]
-                storage["result_npz"]      = npz
-                storage["result_flow_dir"] = storage.get("flow_dir", "+X")
-                ui.notify(f"✅  Done → {Path(npz).name}", type="positive")
-                # Clear done BEFORE the await so re-entrant timer ticks skip this block
-                reset_sim_state()
-                await _load_npz_into_viewer(npz, storage, ui_state)
-                _show_diagnostics(npz, ui_state)
-            else:
-                reset_sim_state()
-
+            return
     _sim_timer = ui.timer(0.5, _poll_sim, active=False)
 
     async def _poll_preview():
-        if not _preview_state["running"] and not _preview_state["done"]:
-            return
+        try:
+            if not _preview_state["running"] and not _preview_state["done"]:
+                return
 
-        # Drain log
-        log = ui_state.get("log_area")
-        prev_len = ui_state.get("prev_log_len", 0)
-        msgs = _preview_state["log"]
-        for msg in msgs[prev_len:]:
-            if log: log.push(msg)
-        ui_state["prev_log_len"] = len(msgs)
+            # Drain log
+            log = ui_state.get("log_area")
+            prev_len = ui_state.get("prev_log_len", 0)
+            msgs = _preview_state["log"]
+            for msg in msgs[prev_len:]:
+                if log: log.push(msg)
+            ui_state["prev_log_len"] = len(msgs)
 
-        if _preview_state["done"]:
+            if _preview_state["done"]:
+                _prev_timer.deactivate()
+                pb = ui_state.get("progress_bar")
+                if pb: pb.value = 0
+                sl = ui_state.get("status_lbl")
+                if _preview_state["error"]:
+                    ui.notify(f"Preview failed: {_preview_state['error'][:200]}",
+                              type="negative", timeout=8000)
+                    if sl: sl.set_text("Preview failed.")
+                else:
+                    # Cache-bust preview GTLFs so browser re-fetches overwritten files
+                    import time as _time
+                    _ts = int(_time.time())
+                    for _bm in (_preview_state.get("body_meta") or []):
+                        if "gltf_url" in _bm:
+                            base = _bm["gltf_url"].split("?")[0]
+                            _bm["gltf_url"] = f"{base}?v={_ts}"
+                    # Only refresh if still in domain mode — never clobber results view
+                    if ui_state.get("viewer_mode", "domain") == "domain":
+                        r = ui_state.get("scene_refresh")
+                        if r: r()
+                    if sl: sl.set_text("Preview ready.")
+                    ui.notify("Preview ready.", type="positive", timeout=2000)
+                    info = ui_state.get("info_lbl")
+                    if info:
+                        gm = _preview_state.get("grid_mm") or [0,0,0]
+                        fd = _preview_state.get("flow_dir", "?")
+                        info.set_text(f"Domain {gm[0]:.0f}×{gm[1]:.0f}×{gm[2]:.0f} mm  flow {fd}  |  {len(_preview_state.get('body_meta') or [])} bodies")
+                btn = ui_state.get("preview_btn")
+                if btn: btn.props(remove="disable")
+
+        except RuntimeError:
             _prev_timer.deactivate()
-            pb = ui_state.get("progress_bar")
-            if pb: pb.value = 0
-            sl = ui_state.get("status_lbl")
-            if _preview_state["error"]:
-                ui.notify(f"Preview failed: {_preview_state['error'][:200]}",
-                          type="negative", timeout=8000)
-                if sl: sl.set_text("Preview failed.")
-            else:
-                # Cache-bust preview GTLFs so browser re-fetches overwritten files
-                import time as _time
-                _ts = int(_time.time())
-                for _bm in (_preview_state.get("body_meta") or []):
-                    if "gltf_url" in _bm:
-                        base = _bm["gltf_url"].split("?")[0]
-                        _bm["gltf_url"] = f"{base}?v={_ts}"
-                # Only refresh if still in domain mode — never clobber results view
-                if ui_state.get("viewer_mode", "domain") == "domain":
-                    r = ui_state.get("scene_refresh")
-                    if r: r()
-                if sl: sl.set_text("Preview ready.")
-                ui.notify("Preview ready.", type="positive", timeout=2000)
-                info = ui_state.get("info_lbl")
-                if info:
-                    gm = _preview_state.get("grid_mm") or [0,0,0]
-                    fd = _preview_state.get("flow_dir", "?")
-                    info.set_text(f"Domain {gm[0]:.0f}×{gm[1]:.0f}×{gm[2]:.0f} mm  flow {fd}  |  {len(_preview_state.get('body_meta') or [])} bodies")
-            btn = ui_state.get("preview_btn")
-            if btn: btn.props(remove="disable")
-
+            return
     _prev_timer = ui.timer(0.4, _poll_preview, active=False)
 
     # Stash timers in ui_state so handlers can activate them
@@ -269,13 +293,14 @@ def _build_control_panel(storage: dict, ui_state: dict):
 
             # ── Domains tab ───────────────────────────────────────────────
             with ui.tab_panel(t_dom).classes("gap-3 flex flex-col"):
-                bp = build_domains_tab(
+                bp, dom_refs = build_domains_tab(
                     storage,
                     on_bodies_changed=lambda names: _on_bodies_changed(names, storage, ui_state),
                     on_save_model=lambda: _save_model_dialog(storage, ui_state),
                     on_load_model=lambda: _load_model_dialog(storage, ui_state),
                 )
                 ui_state["bodies_panel_ref"] = bp
+                ui_state["domain_refs"] = dom_refs
 
             # ── BCs tab ───────────────────────────────────────────────────
             with ui.tab_panel(t_bc).classes("gap-3 flex flex-col"):
@@ -971,6 +996,52 @@ def _on_bodies_changed(names: list[str], storage: dict, ui_state: dict):
     bp = ui_state.get("bodies_panel_ref")
     if bp:
         bp.refresh()
+    # Auto-calc fluid domain from STL bounding boxes
+    async def _auto_calc():
+        bodies = storage.get("bodies", [])
+        lx, ly, lz = await run.io_bound(_calc_domain_from_stls, bodies)
+        if lx is None:
+            return
+        dom_refs = ui_state.get("domain_refs", {})
+        for k, v in [("Lx", lx), ("Ly", ly), ("Lz", lz)]:
+            storage[k] = v
+            inp = dom_refs.get(k)
+            if inp:
+                inp.value = v
+        upd = dom_refs.get("_update_grid_lbl")
+        if upd:
+            upd()
+    ui.timer(0.05, _auto_calc, once=True)
+
+
+def _calc_domain_from_stls(bodies: list):
+    """Read STL bounding boxes, return (Lx, Ly, Lz) in meters with 20% buffer. Runs off-thread."""
+    try:
+        import pyvista as pv
+        xmin, xmax, ymin, ymax, zmin, zmax = 1e9, -1e9, 1e9, -1e9, 1e9, -1e9
+        found = False
+        for b in bodies:
+            path = b.get("stl_path", "") if isinstance(b, dict) else getattr(b, "stl_path", "")
+            if not path or not Path(path).exists():
+                continue
+            try:
+                mesh = pv.read(path)
+                bnd = mesh.bounds  # (xmin,xmax,ymin,ymax,zmin,zmax) in mm
+                xmin = min(xmin, bnd[0]); xmax = max(xmax, bnd[1])
+                ymin = min(ymin, bnd[2]); ymax = max(ymax, bnd[3])
+                zmin = min(zmin, bnd[4]); zmax = max(zmax, bnd[5])
+                found = True
+            except Exception:
+                pass
+        if not found:
+            return None, None, None
+        # Add 20% buffer on each side (total 40% larger in each dimension)
+        dx_mm = max((xmax - xmin) * 1.4, 10.0)
+        dy_mm = max((ymax - ymin) * 1.4, 10.0)
+        dz_mm = max((zmax - zmin) * 1.4, 10.0)
+        return round(dx_mm / 1000, 3), round(dy_mm / 1000, 3), round(dz_mm / 1000, 3)
+    except Exception:
+        return None, None, None
 
 
 async def _on_preview_click(storage: dict, ui_state: dict):
@@ -1067,6 +1138,44 @@ def _is_headless() -> bool:
     if platform.system() != "Windows":
         return not bool(_os.environ.get("DISPLAY") or _os.environ.get("WAYLAND_DISPLAY"))
     return False
+
+
+async def _new_model_dialog(storage: dict, ui_state: dict):
+    """Confirm then reset all storage fields to defaults."""
+    from backend.state import DEFAULT_STATE
+    import copy
+
+    with ui.dialog() as dlg, ui.card().classes(
+        "bg-neutral-800 border border-neutral-600 gap-3"
+    ).style("min-width:360px"):
+        ui.label("New Model").classes("text-sm font-bold text-slate-200")
+        ui.label(
+            "This will clear all bodies, settings, and results. Continue?"
+        ).classes("text-xs text-slate-400")
+        with ui.row().classes("justify-end gap-2 w-full mt-2"):
+            ui.button("Cancel", on_click=lambda: dlg.submit(False)).props(
+                "flat dense"
+            ).classes("text-slate-400")
+            ui.button("Clear All", on_click=lambda: dlg.submit(True)).props(
+                "unelevated dense"
+            ).classes("bg-red-700 text-white px-4")
+
+    result = await dlg
+    if not result:
+        return
+
+    # Reset every key from DEFAULT_STATE
+    for k, v in DEFAULT_STATE.items():
+        storage[k] = copy.deepcopy(v)
+
+    # Reset project name input in header
+    proj_inp = ui_state.get("proj_input")
+    if proj_inp:
+        proj_inp.value = storage["project_name"]
+
+    # Reload page so all tab widgets re-read from fresh storage
+    ui.navigate.reload()
+    ui.notify("New model created.", type="positive")
 
 
 async def _save_model_dialog(storage: dict, ui_state: dict):
@@ -1571,6 +1680,15 @@ def _show_diagnostics(npz_path: str, ui_state: dict):
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ in {"__main__", "__mp_main__"}:
+    # Raise upload limit to 100 MB for large STL files.
+    # Starlette's MultiPartParser caps each part at 1 MB by default,
+    # causing large uploads to stall. Patch at class level before ui.run().
+    try:
+        from starlette.formparsers import MultiPartParser
+        MultiPartParser.max_part_size = 100 * 1024 * 1024  # 100 MB
+    except Exception:
+        pass
+
     ui.run(
         title="FluxCore3D",
         dark=True,
