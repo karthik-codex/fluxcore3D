@@ -19,24 +19,6 @@ def build_domains_tab(
     Returns the BodiesPanel instance so callers can call .refresh() on load.
     """
 
-    # ── Save / Load row ───────────────────────────────────────────────────────
-    with ui.row().classes("gap-2 items-center flex-wrap mb-1"):
-        ui.button(
-            icon="save", text="Save Model",
-            on_click=lambda: on_save_model() if on_save_model else None,
-        ).props("flat dense unelevated").classes(
-            "text-slate-300 border border-neutral-600 px-3 py-1 text-xs"
-        )
-        ui.button(
-            icon="folder_open", text="Load Model",
-            on_click=lambda: on_load_model() if on_load_model else None,
-        ).props("flat dense unelevated").classes(
-            "text-slate-300 border border-neutral-600 px-3 py-1 text-xs"
-        )
-        ui.label("Save / restore all settings as .chtmdl").classes(
-            "text-xs text-slate-500 italic"
-        )
-
     # ── Fluid Domain ──────────────────────────────────────────────────────────
     with ui.card().classes("w-full bg-neutral-800 border border-neutral-700 gap-2"):
         ui.label("FLUID DOMAIN").classes(

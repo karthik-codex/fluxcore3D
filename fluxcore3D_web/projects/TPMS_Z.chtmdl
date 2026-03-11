@@ -1,0 +1,65 @@
+{
+  "version": "1.0",
+  "project_name": "Coldspray_heatsink",
+  "domain": {
+    "Lx": 0.035,
+    "Ly": 0.035,
+    "Lz": 0.03
+  },
+  "j0_divisor": 2.5,
+  "bodies": [
+    {
+      "stl_path": "C:/Users/Karthik/Documents/CHT/geometries/TPMS_heatsink1.stl",
+      "name": "TPMS_heatsink1",
+      "build_dir": "+Z",
+      "material": "Aluminum (physical)",
+      "color": "steelblue",
+      "role": "fluid_base"
+    }
+  ],
+  "fluid": "Air (physical)",
+  "t_in_C": 25.0,
+  "t_amb_C": 25.0,
+  "flow_dir": "-Z",
+  "u_in": 0.5,
+  "collision": "mrt_smag",
+  "outlet_bc": "convective",
+  "bc_type": "surface_flux",
+  "bc_params": {
+    "solid_name": "TPMS_heatsink1",
+    "axis": "-Z",
+    "L_mm": 15.0,
+    "W_mm": 15.0,
+    "q_flux": 45000.0,
+    "auto_center": true
+  },
+  "dx_mm": 0.2,
+  "gpu_raytrace": false,
+  "tol_u_ema": 0.01,
+  "max_outer": 50000,
+  "tol_dTs": 0.01,
+  "tol_dTf": 0.01,
+  "dt_scale_max": 200.0,
+  "max_mg": 15,
+  "face_states": {
+    "inlet": "+Z",
+    "outlets": [
+      "+X",
+      "-X",
+      "+Y",
+      "-Y"
+    ],
+    "walls": [
+      "-Z"
+    ]
+  },
+  "domain_walls": [
+    "-Z"
+  ],
+  "domain_outlets": [
+    "+X",
+    "-X",
+    "+Y",
+    "-Y"
+  ]
+}

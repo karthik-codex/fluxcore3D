@@ -110,25 +110,35 @@ async def main_page():
 
     # ── Page title / header ───────────────────────────────────────────────────
     with ui.row().classes(
-        "w-full items-center gap-3 px-4 py-2 border-b border-neutral-700"
+        "w-full items-center gap-3 px-4 py-0 border-b border-neutral-700"
     ).style("background:#1e1e1e"):
-        ui.label("⚡ FluxCore3D").classes(
-            "text-xl font-black text-slate-200 tracking-wide"
-        )
-        ui.label("GPU-Native · Conjugate Heat Transfer · Multi-Body Assembly").classes(
-            "text-xs text-slate-500"
+        ui.html('<svg width="356" height="72" viewBox="0 0 178 36" fill="none" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="fc3d_i" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#000004"/><stop offset="13%" stop-color="#1B0C41"/><stop offset="26%" stop-color="#4A0C6B"/><stop offset="38%" stop-color="#781C6D"/><stop offset="50%" stop-color="#A52C60"/><stop offset="62%" stop-color="#CF4446"/><stop offset="74%" stop-color="#ED6925"/><stop offset="86%" stop-color="#FB9A06"/><stop offset="93%" stop-color="#F7D13D"/><stop offset="100%" stop-color="#FCFFA4"/></linearGradient><linearGradient id="fc3d_bg" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#0072FF"/><stop offset="100%" stop-color="#00C6FF"/></linearGradient><linearGradient id="fc3d_wm" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#00C6FF"/><stop offset="100%" stop-color="#00FFA3"/></linearGradient><filter id="fc3d_glow"><feGaussianBlur stdDeviation="1.1" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><clipPath id="fc3d_cc"><rect x="5" y="5" width="24" height="24" rx="1.5"/></clipPath></defs><rect x="5" y="5" width="24" height="24" rx="1.5" fill="#080c14" stroke="#1a2440" stroke-width="1"/><rect x="5" y="5" width="24" height="24" rx="1.5" fill="url(#fc3d_bg)" opacity="0.08" clip-path="url(#fc3d_cc)"/><path d="M0,14 C5,14 7,11 11,11 S17,14 22,14 S27,17 34,17" stroke="url(#fc3d_i)" stroke-width="1.3" fill="none" filter="url(#fc3d_glow)" opacity="1"/><path d="M0,18 C5,18 7,15 11,15 S17,18 22,18 S27,21 34,21" stroke="url(#fc3d_i)" stroke-width="0.9" fill="none" opacity="0.65"/><path d="M0,22 C5,22 7,19 11,19 S17,22 22,22 S27,25 34,25" stroke="url(#fc3d_i)" stroke-width="0.6" fill="none" opacity="0.35"/><line x1="11" y1="5" x2="11" y2="2" stroke="#1e3a4a" stroke-width="1.3" stroke-linecap="round"/><line x1="17" y1="5" x2="17" y2="2" stroke="#1e3a4a" stroke-width="1.3" stroke-linecap="round"/><line x1="23" y1="5" x2="23" y2="2" stroke="#1e3a4a" stroke-width="1.3" stroke-linecap="round"/><line x1="11" y1="29" x2="11" y2="32" stroke="#1e3a4a" stroke-width="1.3" stroke-linecap="round"/><line x1="17" y1="29" x2="17" y2="32" stroke="#1e3a4a" stroke-width="1.3" stroke-linecap="round"/><line x1="23" y1="29" x2="23" y2="32" stroke="#1e3a4a" stroke-width="1.3" stroke-linecap="round"/><line x1="5" y1="12" x2="2" y2="12" stroke="#1e3a4a" stroke-width="1.3" stroke-linecap="round"/><line x1="5" y1="18" x2="2" y2="18" stroke="#1e3a4a" stroke-width="1.3" stroke-linecap="round"/><line x1="5" y1="24" x2="2" y2="24" stroke="#1e3a4a" stroke-width="1.3" stroke-linecap="round"/><line x1="29" y1="12" x2="32" y2="12" stroke="#1e3a4a" stroke-width="1.3" stroke-linecap="round"/><line x1="29" y1="18" x2="32" y2="18" stroke="#1e3a4a" stroke-width="1.3" stroke-linecap="round"/><line x1="29" y1="24" x2="32" y2="24" stroke="#1e3a4a" stroke-width="1.3" stroke-linecap="round"/><text x="40" y="15" font-family="Courier New,monospace" font-size="10" font-weight="700" letter-spacing="3" fill="url(#fc3d_wm)">FLUX</text><text x="40" y="28" font-family="Courier New,monospace" font-size="10" font-weight="700" letter-spacing="3" fill="#e2e8f0">CORE<tspan fill="#00FFA3" letter-spacing="1.5">3D</tspan></text></svg>').classes("flex-shrink-0")
+        ui.label("Thermal Intelligence for Electronics Cooling").classes(
+            "text-large text-slate-500 tracking-widest font-mono"
         )
         ui.space()
-        # Project name input
-        ui.label("Project:").classes("text-xs text-slate-400")
+        # ── Project + model buttons (top-right) ───────────────────────────────
+        ui.label("Project:").classes("text-xs text-slate-400 flex-shrink-0")
         proj_input = ui.input(
             placeholder="project_name",
             value=storage.get("project_name", "cht_result"),
             on_change=lambda e: storage.update({"project_name": e.value}),
-        ).props("dense outlined").classes("w-44 text-sm")
+        ).props("dense outlined").classes("w-36 text-sm flex-shrink-0")
+        ui.button(
+            icon="folder_open", text="Load",
+            on_click=lambda: _load_model_dialog(storage, ui_state),
+        ).props("flat dense unelevated").classes(
+            "text-slate-300 border border-neutral-600 px-2 text-xs flex-shrink-0"
+        )
+        ui.button(
+            icon="save", text="Save",
+            on_click=lambda: _save_model_dialog(storage, ui_state),
+        ).props("flat dense unelevated").classes(
+            "text-slate-300 border border-neutral-600 px-2 text-xs flex-shrink-0"
+        )
 
     # ── Main body: splitter ───────────────────────────────────────────────────
-    with ui.splitter(value=30).classes("w-full flex-1").style(
+    with ui.splitter(value=26).classes("w-full flex-1").style(
         "height: calc(100vh - 52px)"
     ) as splitter:
         with splitter.before:

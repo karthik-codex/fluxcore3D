@@ -62,7 +62,7 @@ def build_visualize_tab(
         ui.label("FIELD").classes(
             "text-xs font-bold tracking-widest text-slate-400 uppercase"
         )
-        with ui.grid(columns=2).classes("gap-x-6 gap-y-1 items-center"):
+        with ui.grid(columns=4).classes("gap-x-3 gap-y-1 items-center"):
             ui.label("Scalar field").classes("text-xs text-slate-400")
             ui.select(
                 options=["T", "speed", "rho"],
@@ -109,16 +109,17 @@ def build_visualize_tab(
 
     # ── Streamlines ───────────────────────────────────────────────────────────
     with ui.card().classes("w-full bg-neutral-800 border border-neutral-700 gap-2"):
-        ui.label("STREAMLINES").classes(
-            "text-xs font-bold tracking-widest text-slate-400 uppercase"
-        )
         with ui.grid(columns=2).classes("gap-x-6 gap-y-1 items-center"):
-            ui.label("").classes()  # spacer
+            ui.label("STREAMLINES").classes(
+                "text-xs font-bold tracking-widest text-slate-400 uppercase"
+            )
             ui.checkbox(
-                "Show streamlines",
+                "Show",
                 value=storage.get("vis_stream", True),
                 on_change=lambda e: storage.update({"vis_stream": e.value}),
             ).classes("text-xs text-slate-300")
+
+        with ui.grid(columns=4).classes("gap-x-6 gap-y-1 items-center"):
 
             ui.label("N seeds").classes("text-xs text-slate-400")
             ui.number(
@@ -130,7 +131,7 @@ def build_visualize_tab(
             ui.label("Seed mode").classes("text-xs text-slate-400")
             ui.select(
                 options=["inlet_plane","line","sphere"],
-                value=storage.get("vis_seed_mode","inlet_plane"),
+                value=storage.get("vis_seed_mode","line"),
                 on_change=lambda e: storage.update({"vis_seed_mode": e.value}),
             ).props("dense outlined").classes("w-full")
 
