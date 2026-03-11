@@ -1,1 +1,11 @@
-pip install "setuptools<74"
+setuptools<74
+nicegui
+pyvista
+vtk
+numpy
+scipy
+matplotlib
+trimesh
+aiofiles
+ninja
+tqdm
