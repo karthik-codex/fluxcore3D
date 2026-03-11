@@ -6,7 +6,7 @@ SimWorker (GUI thread) and cht_run.py (CLI).
 import os, traceback
 import numpy as np
 from pathlib import Path
-from PyQt5.QtCore import QObject, pyqtSignal
+#from PyQt5.QtCore import QObject, pyqtSignal
 
 from UI_components.cht_constants   import FLUID_PRESETS, SOLID_PRESETS
 from UI_components.cht_sim_imports import (
@@ -194,29 +194,29 @@ def _apply_bc(sim, cfg, assembly, bct, bcp, log_fn):
 
 # ── Qt wrapper ────────────────────────────────────────────────────────────────
 
-class SimWorker(QObject):
-    progress = pyqtSignal(str)
-    pct      = pyqtSignal(int)
-    finished = pyqtSignal(str)
-    error    = pyqtSignal(str)
+# class SimWorker(QObject):
+#     progress = pyqtSignal(str)
+#     pct      = pyqtSignal(int)
+#     finished = pyqtSignal(str)
+#     error    = pyqtSignal(str)
 
-    def __init__(self, params):
-        super().__init__()
-        self.params = params
-        self._abort = False
+#     def __init__(self, params):
+#         super().__init__()
+#         self.params = params
+#         self._abort = False
 
-    def abort(self): self._abort = True
+#     def abort(self): self._abort = True
 
-    def run(self):
-        if not HAS_SIM:
-            self.error.emit("Simulation modules not installed."); return
-        try:
-            out = run_simulation_blocking(
-                self.params,
-                log_fn      = self.progress.emit,
-                progress_fn = self.pct.emit,
-                abort_fn    = lambda: self._abort,
-            )
-            self.finished.emit(out)
-        except Exception as exc:
-            self.error.emit(f"{exc}\n\n{traceback.format_exc()}")
+#     def run(self):
+#         if not HAS_SIM:
+#             self.error.emit("Simulation modules not installed."); return
+#         try:
+#             out = run_simulation_blocking(
+#                 self.params,
+#                 log_fn      = self.progress.emit,
+#                 progress_fn = self.pct.emit,
+#                 abort_fn    = lambda: self._abort,
+#             )
+#             self.finished.emit(out)
+#         except Exception as exc:
+#             self.error.emit(f"{exc}\n\n{traceback.format_exc()}")
