@@ -8,7 +8,7 @@ DEFAULT_STATE: dict = {
     # ── Domains ──────────────────────────────────────────────────────────────
     "Lx": 5.0, "Ly": 1.0, "Lz": 1.0,
     "j0_divisor": 2.5,
-    "fluid": "Air (LBM-scaled)",
+    "fluid": "Air (physical)",
     "gpu_raytrace": True,
     "bodies": [],   # list[dict] — never store widget refs here
 
@@ -33,17 +33,17 @@ DEFAULT_STATE: dict = {
     "dx_mm": 10.0,
 
     # ── Solver ────────────────────────────────────────────────────────────────
-    "tol_u_ema": 0.005,
+    "tol_u_ema": 0.01,
     "collision": "mrt_smag",
     "outlet_bc": "convective",
     "max_outer": 50000,
-    "tol_dTs": 0.005,
-    "tol_dTf": 0.005,
-    "dt_scale_max": 100.0,
+    "tol_dTs": 0.01,
+    "tol_dTf": 0.01,
+    "dt_scale_max": 250.0,
     "max_mg": 15,
 
     # ── Project / results ─────────────────────────────────────────────────────
-    "project_name": "cht_result",
+    "project_name": "new_project",
     "result_npz": "",
     "result_flow_dir": "+X",
 
@@ -55,7 +55,7 @@ DEFAULT_STATE: dict = {
     "vis_fluid_opacity": 0.3,
     "vis_stream": True,
     "vis_nseeds": 150,
-    "vis_seed_mode": "inlet_plane",
+    "vis_seed_mode": "line",
     "vis_low_quality": True,
     "vis_bodies": {},   # name → bool
 }

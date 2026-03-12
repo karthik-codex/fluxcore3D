@@ -1,4 +1,3 @@
-setuptools<74
 nicegui
 pyvista
 vtk
@@ -9,3 +8,4 @@ trimesh
 aiofiles
 ninja
 tqdm
+setuptools<74

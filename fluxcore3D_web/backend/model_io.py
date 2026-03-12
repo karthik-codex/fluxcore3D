@@ -8,19 +8,117 @@ from pathlib import Path
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 FLUID_PRESETS = {
-    "Water":            dict(nu_m2_s=1.0e-6,  rho_kg_m3=997.0, k_W_mK=0.600, cp_J_kgK=4182.0, tin_C=25.0),
-    "Air (physical)":   dict(nu_m2_s=15.0e-6, rho_kg_m3=1.25,  k_W_mK=0.024, cp_J_kgK=1006.0, tin_C=20.0),
-    "Air (LBM-scaled)": dict(nu_m2_s=0.02,    rho_kg_m3=1.0,   k_W_mK=1.0,   cp_J_kgK=50.0,   tin_C=20.0),
+    # ── Standard coolants ────────────────────────────────────────────────────
+    "Water":
+        dict(nu_m2_s=1.00e-6,  rho_kg_m3=997.0,  k_W_mK=0.600, cp_J_kgK=4182.0, tin_C=25.0),
+    "EG/Water 50-50":           # ethylene glycol 50% by vol, 25°C
+        dict(nu_m2_s=3.85e-6,  rho_kg_m3=1075.0, k_W_mK=0.410, cp_J_kgK=3300.0, tin_C=25.0),
+    "PG/Water 50-50":           # propylene glycol 50% by vol, 25°C (food-safe)
+        dict(nu_m2_s=5.00e-6,  rho_kg_m3=1040.0, k_W_mK=0.380, cp_J_kgK=3600.0, tin_C=25.0),
+    "Mineral Oil":              # transformer/immersion grade
+        dict(nu_m2_s=40.0e-6,  rho_kg_m3=870.0,  k_W_mK=0.130, cp_J_kgK=1900.0, tin_C=40.0),
+    "PAO-6":                    # polyalphaolefin, data center cold plate
+        dict(nu_m2_s=18.0e-6,  rho_kg_m3=820.0,  k_W_mK=0.140, cp_J_kgK=2100.0, tin_C=40.0),
+
+    # ── Dielectric fluorocarbon coolants ─────────────────────────────────────
+    "FC-72":                    # 3M Fluorinert, Tb=56°C, immersion/spray
+        dict(nu_m2_s=0.38e-6,  rho_kg_m3=1680.0, k_W_mK=0.057, cp_J_kgK=1100.0, tin_C=25.0),
+    "FC-40":                    # 3M Fluorinert, Tb=165°C, high-temp immersion
+        dict(nu_m2_s=2.20e-6,  rho_kg_m3=1855.0, k_W_mK=0.062, cp_J_kgK=1100.0, tin_C=25.0),
+    "Novec 649":                # 3M Novec, low-GWP FC-72 replacement
+        dict(nu_m2_s=0.40e-6,  rho_kg_m3=1600.0, k_W_mK=0.059, cp_J_kgK=1103.0, tin_C=25.0),
+    "HFE-7100":                 # 3M Novec 7100, HFE chemistry
+        dict(nu_m2_s=0.61e-6,  rho_kg_m3=1510.0, k_W_mK=0.069, cp_J_kgK=1183.0, tin_C=25.0),
+
+    # ── Gas ──────────────────────────────────────────────────────────────────
+    "Air (physical)":
+        dict(nu_m2_s=15.0e-6,  rho_kg_m3=1.225,  k_W_mK=0.0257, cp_J_kgK=1006.0, tin_C=20.0),
+    "Air (LBM-scaled)":
+        dict(nu_m2_s=0.02,     rho_kg_m3=1.0,    k_W_mK=1.0,    cp_J_kgK=50.0,   tin_C=20.0),
 }
 
 SOLID_PRESETS = {
-    "Aluminum (physical)":   dict(k_W_mK=237.0, rho_kg_m3=2700.0, cp_J_kgK=900.0),
-    "Aluminum (LBM-scaled)": dict(k_W_mK=5.0,   rho_kg_m3=1.0,    cp_J_kgK=80.0),
-    "Copper":                dict(k_W_mK=401.0, rho_kg_m3=8960.0, cp_J_kgK=385.0),
-    "TIM (silicone pad)":    dict(k_W_mK=6.0,   rho_kg_m3=2500.0, cp_J_kgK=800.0),
-    "Transformer core":      dict(k_W_mK=25.0,  rho_kg_m3=7650.0, cp_J_kgK=490.0),
-    "Ferrite core":          dict(k_W_mK=4.0,   rho_kg_m3=4800.0, cp_J_kgK=700.0),
-    "Steel":                 dict(k_W_mK=50.0,  rho_kg_m3=7850.0, cp_J_kgK=490.0),
+    # ── Common metals ────────────────────────────────────────────────────────
+    "Aluminum":
+        dict(k_W_mK=237.0,  rho_kg_m3=2700.0, cp_J_kgK=900.0),
+    "Copper":
+        dict(k_W_mK=401.0,  rho_kg_m3=8960.0, cp_J_kgK=385.0),
+    "Steel (carbon)":
+        dict(k_W_mK=50.0,   rho_kg_m3=7850.0, cp_J_kgK=490.0),
+    "Stainless Steel 316":
+        dict(k_W_mK=16.2,   rho_kg_m3=8000.0, cp_J_kgK=500.0),
+    "Tungsten":             # heat spreader, high-density shielding
+        dict(k_W_mK=173.0,  rho_kg_m3=19300.0, cp_J_kgK=134.0),
+    "Molybdenum":           # CTE-matched carrier for power devices
+        dict(k_W_mK=138.0,  rho_kg_m3=10220.0, cp_J_kgK=251.0),
+
+    # ── Semiconductor dies ───────────────────────────────────────────────────
+    "Silicon (die)":
+        dict(k_W_mK=148.0,  rho_kg_m3=2329.0, cp_J_kgK=700.0),
+    "SiC (4H, substrate)":  # silicon carbide — SiC MOSFET, Schottky diode
+        dict(k_W_mK=370.0,  rho_kg_m3=3210.0, cp_J_kgK=750.0),
+    "GaN (bulk)":           # gallium nitride — GaN HEMT, RF, power
+        dict(k_W_mK=130.0,  rho_kg_m3=6150.0, cp_J_kgK=490.0),
+    "GaAs":                 # gallium arsenide — RF/microwave die
+        dict(k_W_mK=46.0,   rho_kg_m3=5320.0, cp_J_kgK=350.0),
+    "Diamond (CVD)":        # heat spreader for GaN-on-diamond
+        dict(k_W_mK=1800.0, rho_kg_m3=3510.0, cp_J_kgK=520.0),
+
+    # ── Ceramic substrates ───────────────────────────────────────────────────
+    "AlN (standard, 170W)": # aluminum nitride DBC substrate
+        dict(k_W_mK=170.0,  rho_kg_m3=3260.0, cp_J_kgK=740.0),
+    "AlN (high grade, 230W)":
+        dict(k_W_mK=230.0,  rho_kg_m3=3260.0, cp_J_kgK=740.0),
+    "Si3N4":                # silicon nitride — toughest ceramic substrate
+        dict(k_W_mK=30.0,   rho_kg_m3=3210.0, cp_J_kgK=700.0),
+    "Al2O3 (96%)":          # alumina — low-cost DBC ceramic
+        dict(k_W_mK=24.0,   rho_kg_m3=3720.0, cp_J_kgK=880.0),
+    "BeO":                  # beryllia — high-k, toxic to machine
+        dict(k_W_mK=250.0,  rho_kg_m3=2850.0, cp_J_kgK=1050.0),
+
+    # ── Carbon-based spreaders ───────────────────────────────────────────────
+    "Graphite (isotropic)":
+        dict(k_W_mK=120.0,  rho_kg_m3=1800.0, cp_J_kgK=710.0),
+    "Pyrolytic Graphite (in-plane)":  # vapor chamber spreader core
+        dict(k_W_mK=1500.0, rho_kg_m3=2200.0, cp_J_kgK=710.0),
+
+    # ── Die attach / bonding layers ──────────────────────────────────────────
+    "Solder SAC305":        # Sn96.5Ag3Cu0.5, standard reflow
+        dict(k_W_mK=57.0,   rho_kg_m3=7390.0, cp_J_kgK=230.0),
+    "Indium solder":        # In100, low-temp, compliant
+        dict(k_W_mK=82.0,   rho_kg_m3=7310.0, cp_J_kgK=233.0),
+    "Sintered Silver":      # Ag sintering paste, high-power modules
+        dict(k_W_mK=250.0,  rho_kg_m3=6000.0, cp_J_kgK=235.0),
+
+    # ── Thermal interface materials ──────────────────────────────────────────
+    "TIM (silicone pad, 6W)":
+        dict(k_W_mK=6.0,    rho_kg_m3=2500.0, cp_J_kgK=800.0),
+    "TIM (phase-change, 4W)":
+        dict(k_W_mK=4.0,    rho_kg_m3=2300.0, cp_J_kgK=900.0),
+    "Thermal Grease (high-k)":  # Shin-Etsu X-23 class
+        dict(k_W_mK=10.0,   rho_kg_m3=2600.0, cp_J_kgK=750.0),
+    "Thermal Epoxy":
+        dict(k_W_mK=2.0,    rho_kg_m3=1800.0, cp_J_kgK=1050.0),
+
+    # ── Magnetic / passive components ────────────────────────────────────────
+    "Transformer core (GOES)": # grain-oriented electrical steel
+        dict(k_W_mK=25.0,   rho_kg_m3=7650.0, cp_J_kgK=490.0),
+    "Ferrite (MnZn)":
+        dict(k_W_mK=4.0,    rho_kg_m3=4800.0, cp_J_kgK=700.0),
+    "Ferrite (NiZn)":
+        dict(k_W_mK=3.5,    rho_kg_m3=5000.0, cp_J_kgK=680.0),
+
+    # ── Encapsulants / PCB ───────────────────────────────────────────────────
+    "Epoxy mold compound":  # standard IC package mold
+        dict(k_W_mK=0.8,    rho_kg_m3=1900.0, cp_J_kgK=1050.0),
+    "FR4 (PCB)":
+        dict(k_W_mK=0.3,    rho_kg_m3=1850.0, cp_J_kgK=1150.0),
+    "Kapton (polyimide)":   # flex circuit, IMS dielectric
+        dict(k_W_mK=0.12,   rho_kg_m3=1420.0, cp_J_kgK=1090.0),
+
+    # ── LBM-scaled (for debugging / reduced-order runs) ─────────────────────
+    "Aluminum (LBM-scaled)":
+        dict(k_W_mK=5.0,    rho_kg_m3=1.0,    cp_J_kgK=80.0),
 }
 
 BODY_COLORS  = ["steelblue", "darkorange", "gold", "sienna", "mediumpurple",

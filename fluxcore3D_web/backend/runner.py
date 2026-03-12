@@ -203,11 +203,6 @@ def _blocking_run(params: dict):
     finally:
         sys.stdout, sys.stderr = _orig_out, _orig_err
         os.chdir(orig_cwd)
-        try:
-            import torch
-            torch.cuda.empty_cache()
-        except Exception:
-            pass      
         _sim_state["done"]    = True
         _sim_state["running"] = False
 

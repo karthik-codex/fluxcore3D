@@ -1,0 +1,61 @@
+{
+  "version": "1.0",
+  "project_name": "cht_result",
+  "domain": {
+    "Lx": 0.11,
+    "Ly": 0.4,
+    "Lz": 0.12
+  },
+  "j0_divisor": 3.25,
+  "bodies": [
+    {
+      "stl_path": "C:\\Users\\Karthik\\Documents\\FluxCore3D\\geometries\\simpolifiedMotorcycle_Suzuki_GSX.stl",
+      "name": "simpolifiedMotorcycle_Suzuki_GSX",
+      "build_dir": "+Z",
+      "material": "Aluminum (LBM-scaled)",
+      "color": "steelblue",
+      "role": "fluid_base"
+    }
+  ],
+  "fluid": "Air (LBM-scaled)",
+  "t_in_C": 20.0,
+  "t_amb_C": 20.0,
+  "flow_dir": "+Y",
+  "u_in": 5.0,
+  "collision": "mrt_smag",
+  "outlet_bc": "convective",
+  "bc_type": "volumetric",
+  "bc_params": {
+    "solid_name": "simpolifiedMotorcycle_Suzuki_GSX",
+    "Q_watts": 50.0
+  },
+  "dx_mm": 0.8,
+  "gpu_raytrace": false,
+  "tol_u_ema": 0.005,
+  "max_outer": 50000,
+  "tol_dTs": 0.005,
+  "tol_dTf": 0.005,
+  "dt_scale_max": 100.0,
+  "max_mg": 15,
+  "face_states": {
+    "inlet": "-Y",
+    "outlets": [
+      "+Y"
+    ],
+    "walls": [
+      "+X",
+      "-X",
+      "+Z",
+      "-Z"
+    ]
+  },
+  "domain_walls": [
+    "+X",
+    "-X",
+    "+Z",
+    "-Z"
+  ],
+  "domain_outlets": [
+    "+Y"
+  ]
+}
